@@ -20,7 +20,7 @@ public class Window extends JPanel{
     private final Color black = new Color(0x8b5122);
 
     ImageIcon pieces[] = new ImageIcon[64];
-    ImageIcon emptyTile = new ImageIcon("GUI\\PNGs\\Empty_Tile.png");
+   
     ImageIcon image;
     int width;
     int height;
@@ -34,12 +34,10 @@ public class Window extends JPanel{
     public Window() {
 
 
-    image = emptyTile;
+    image = null;
     imageCorner = new Point(0, 0);
 
     this.setSize(8*tileSize + 10, 8*tileSize + 35);
-
-       
 
         ClickListener clickListener = new ClickListener();
         this.addMouseListener(clickListener);
@@ -53,16 +51,16 @@ public class Window extends JPanel{
         pieces[index] = newPiece;
         }
 
-     
-
-      
-
         public int getIndex(Point point) {
             double row = (point.getY() - point.getY()%tileSize)/ tileSize;
             double col = (point.getX() - point.getX()%tileSize)/ tileSize;
 
             int index = (int)(8*row + col);
             return index;
+        }
+
+        public ImageIcon[] getBoard() {
+            return pieces;
         }
 
 
@@ -115,8 +113,9 @@ public class Window extends JPanel{
         public void mouseReleased(MouseEvent e) {
             int newIndex = getIndex(currentPoint);
 
+            if (image != null) {
             pieces[newIndex] = image;
-
+            }
             int row = (newIndex - (newIndex % 8)) / 8;
             int col = newIndex - 8*row;
             int newX = col*tileSize + offset;
@@ -127,7 +126,7 @@ public class Window extends JPanel{
         }
     }
 
-    private class DragListener extends MouseMotionAdapter {
+    private class DragListener extends MouseMotionAdapter { 
         public void mouseDragged(MouseEvent e) {
             currentPoint = e.getPoint();
 
