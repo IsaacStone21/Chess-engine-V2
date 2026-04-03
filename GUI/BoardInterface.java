@@ -6,22 +6,28 @@ import java.awt.Point;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-
-import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 
+import Engine.Board;
+import Engine.FENUtil;
+import Engine.MoveGenerator;
 
 
-public class Window extends JPanel{
+
+public class BoardInterface extends JPanel{
 
 
  public static final int tileSize = 55;
     private final Color white = new Color(0xcba88a);
     private final Color black = new Color(0x8b5122);
 
-    ImageIcon pieces[] = new ImageIcon[64];
+    PiecePNG pieces[] = new PiecePNG[64];
+    Board board;
+    MoveGenerator moveGenerator = new MoveGenerator();
    
-    ImageIcon image;
+    int startIndex;
+    int targetIndex;
+    PiecePNG image;
     int width;
     int height;
     Point imageCorner;
@@ -31,11 +37,12 @@ public class Window extends JPanel{
     final int offset = 5;
 
 
-    public Window() {
+    public BoardInterface() {
 
 
     image = null;
     imageCorner = new Point(0, 0);
+    board = new Board();
 
     this.setSize(8*tileSize + 10, 8*tileSize + 35);
 
@@ -44,12 +51,26 @@ public class Window extends JPanel{
 
         DragListener dragListener = new DragListener();
         this.addMouseMotionListener(dragListener);
+
+        
     }
 
    
-    public void setTile(ImageIcon newPiece, int index) {
+    public void setTile(PiecePNG newPiece, int index) {
         pieces[index] = newPiece;
+       
         }
+
+    public void updateBoard() {
+       //board.setPositionFromFEN(FENUtil.PNGPositionToFEN(pieces));
+        board.setPositionFromFEN(FENUtil.startFEN);
+
+    }
+
+    public void updateBoardInterface() {
+        pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.square));
+        repaint();
+    }
 
         public int getIndex(Point point) {
             double row = (point.getY() - point.getY()%tileSize)/ tileSize;
@@ -59,7 +80,7 @@ public class Window extends JPanel{
             return index;
         }
 
-        public ImageIcon[] getBoard() {
+        public PiecePNG[] getBoard() {
             return pieces;
         }
 
@@ -98,7 +119,8 @@ public class Window extends JPanel{
         public void mousePressed(MouseEvent e) {
             prevPt = e.getPoint();
             int index = getIndex(prevPt);
-            image = pieces[getIndex(prevPt)];
+            startIndex = index;
+            image = pieces[index];
             pieces[index] = null;
 
             int row = (index - (index % 8)) / 8;
@@ -113,8 +135,16 @@ public class Window extends JPanel{
         public void mouseReleased(MouseEvent e) {
             int newIndex = getIndex(currentPoint);
 
-            if (image != null) {
+            targetIndex = newIndex;
+
+            boolean isLegalMove = moveGenerator.isLegalMove(startIndex, targetIndex);
+
+            if ((image != null) ) {
             pieces[newIndex] = image;
+            updateBoard();
+            board.whiteToMove = !board.whiteToMove;
+
+            System.out.println("White's turn: " + board.whiteToMove);
             }
             int row = (newIndex - (newIndex % 8)) / 8;
             int col = newIndex - 8*row;
@@ -122,6 +152,8 @@ public class Window extends JPanel{
             int newY = row*tileSize + offset;
             
             imageCorner = new Point(newX, newY);
+
+            
             repaint();
         }
     }
