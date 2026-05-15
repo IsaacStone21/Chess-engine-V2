@@ -7,17 +7,14 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import javax.swing.JPanel;
-
 import Engine.Board;
 import Engine.FENUtil;
 import Engine.MoveGenerator;
 
 
-
 public class BoardInterface extends JPanel{
 
-
- public static final int tileSize = 55;
+    private int tileSize = LaunchPage.tileSize;
     private final Color white = new Color(0xcba88a);
     private final Color black = new Color(0x8b5122);
 
@@ -39,10 +36,10 @@ public class BoardInterface extends JPanel{
 
     public BoardInterface() {
 
-
     image = null;
     imageCorner = new Point(0, 0);
-    board = new Board();
+    board = Board.createBoard();
+    board.whiteToMove = true;
 
     this.setSize(8*tileSize + 10, 8*tileSize + 35);
 
@@ -58,11 +55,9 @@ public class BoardInterface extends JPanel{
    
     public void setTile(PiecePNG newPiece, int index) {
         pieces[index] = newPiece;
-       
         }
 
     public void updateBoard() {
-       //board.setPositionFromFEN(FENUtil.PNGPositionToFEN(pieces));
         board.setPositionFromFEN(FENUtil.startFEN);
 
     }
@@ -133,23 +128,36 @@ public class BoardInterface extends JPanel{
         }
 
         public void mouseReleased(MouseEvent e) {
-            int newIndex = getIndex(currentPoint);
+            int targetIndex = getIndex(currentPoint);
 
-            targetIndex = newIndex;
+            int row;
+            int col;
+            int newX;
+            int newY;
 
             boolean isLegalMove = moveGenerator.isLegalMove(startIndex, targetIndex);
 
-            if ((image != null) ) {
-            pieces[newIndex] = image;
-            updateBoard();
+            if ((image != null && isLegalMove) ) {
+            pieces[targetIndex] = image;
+            //updateBoard();
             board.whiteToMove = !board.whiteToMove;
 
-            System.out.println("White's turn: " + board.whiteToMove);
+            row = (targetIndex - (targetIndex % 8)) / 8;
+            col = targetIndex - 8*row;
+            newX = col*tileSize + offset;
+            newY = row*tileSize + offset;
+
+            board.updateBoard(FENUtil.PNGPositionToFEN(pieces));
+
+            } else {
+                System.out.println("Illegal Move");
+                row = (startIndex - (startIndex % 8)) / 8;
+                col = startIndex - 8*row;
+                newX = col*tileSize + offset;
+                newY = row*tileSize + offset;
+                pieces[startIndex] = image;
             }
-            int row = (newIndex - (newIndex % 8)) / 8;
-            int col = newIndex - 8*row;
-            int newX = col*tileSize + offset;
-            int newY = row*tileSize + offset;
+            
             
             imageCorner = new Point(newX, newY);
 

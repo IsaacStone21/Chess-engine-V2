@@ -8,8 +8,8 @@ import GUI.PiecePNG;
 
 public class FENUtil {
 
-    // public static final String startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-     public static final String startFEN = "rnbqkbnr/8/8/8/8/8/8/RNBQKBNR";
+    public static final String startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+    //public static final String startFEN = "rnbqkbnr/8/8/8/8/8/8/RNBQKBNR";
     
     public static Map<PiecePNG, Character> PNGToCharMap = new HashMap<>();
 
@@ -19,7 +19,7 @@ public class FENUtil {
 
     public static Map<Character, Piece> charToPieceMap = new HashMap<>();
 
-    public static Map<Piece, Character> pieceToCharMap = new HashMap<>();
+    public static Map<Integer, Character> pieceToCharMap = new HashMap<>();
 
     static {
         initializeMaps();
@@ -52,7 +52,7 @@ public class FENUtil {
         charToIDMap.put('Q', Piece.white | Piece.queen);
         charToIDMap.put('k', Piece.black | Piece.king);
         charToIDMap.put('K', Piece.white | Piece.king);
-        charToIDMap.put('e', null); 
+        charToIDMap.put('e', 0); 
         
         charToPNGMap.put('p', LaunchPage.blackPawnPNG);
         charToPNGMap.put('P', LaunchPage.whitePawnPNG);
@@ -79,21 +79,21 @@ public class FENUtil {
         charToPieceMap.put('Q', new Piece(Piece.white,  Piece.queen));
         charToPieceMap.put('k', new Piece(Piece.black,  Piece.king));
         charToPieceMap.put('K', new Piece(Piece.white,  Piece.king));
-        charToPieceMap.put('e', null); 
+        charToPieceMap.put('e', Piece.emptyTile); 
 
-        pieceToCharMap.put(new Piece(Piece.black,  Piece.pawn), 'p');
-        pieceToCharMap.put(new Piece(Piece.white,  Piece.pawn), 'P');
-        pieceToCharMap.put(new Piece(Piece.black,  Piece.knight), 'n');
-        pieceToCharMap.put(new Piece(Piece.white,  Piece.knight), 'N');
-        pieceToCharMap.put(new Piece(Piece.black,  Piece.bishop), 'b');
-        pieceToCharMap.put(new Piece(Piece.white,  Piece.bishop), 'B');
-        pieceToCharMap.put(new Piece(Piece.black,  Piece.rook), 'r');
-        pieceToCharMap.put(new Piece(Piece.white,  Piece.rook), 'R');
-        pieceToCharMap.put(new Piece(Piece.black,  Piece.queen), 'q');
-        pieceToCharMap.put(new Piece(Piece.white,  Piece.queen), 'Q');
-        pieceToCharMap.put(new Piece(Piece.black,  Piece.king), 'k');
-        pieceToCharMap.put(new Piece(Piece.white,  Piece.king), 'K');
-        pieceToCharMap.put(null, '1'); 
+        pieceToCharMap.put(Piece.black | Piece.pawn, 'p');
+        pieceToCharMap.put(Piece.white | Piece.pawn, 'P');
+        pieceToCharMap.put(Piece.black | Piece.knight, 'n');
+        pieceToCharMap.put(Piece.white |  Piece.knight, 'N');
+        pieceToCharMap.put(Piece.black | Piece.bishop, 'b');
+        pieceToCharMap.put(Piece.white | Piece.bishop, 'B');
+        pieceToCharMap.put(Piece.black | Piece.rook, 'r');
+        pieceToCharMap.put(Piece.white | Piece.rook, 'R');
+        pieceToCharMap.put(Piece.black | Piece.queen, 'q');
+        pieceToCharMap.put(Piece.white | Piece.queen, 'Q');
+        pieceToCharMap.put(Piece.black | Piece.king, 'k');
+        pieceToCharMap.put(Piece.white | Piece.king, 'K');
+        pieceToCharMap.put(0, 'e'); 
     }
 
     public static String PNGPositionToFEN(PiecePNG[] piece){
@@ -187,7 +187,7 @@ public class FENUtil {
             if(Character.isDigit(piece)) {
                     int numEmptyTiles = Character.getNumericValue(piece);
                     for(int j = 0; j < numEmptyTiles; j++) {
-                        position[index + j] = null;
+                        position[index + j] = Piece.emptyTile;
                         col++;
                     }
                 } else {
@@ -210,7 +210,8 @@ public class FENUtil {
             for(int col = 0; col < 8; col++) {
                 index = 8*row + col;
                 
-                Character pieceType = pieceToCharMap.get(piece[index]);
+                Character pieceType = pieceToCharMap.get(piece[index].ID);
+
                 if(pieceType.equals('e')) {
                     emptyTiles++;
                     
