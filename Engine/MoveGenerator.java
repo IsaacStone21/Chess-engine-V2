@@ -8,6 +8,9 @@ public class MoveGenerator {
     //Up, down, left, right, UL, UR, DL, DR
     int[] directionOffsets = {-8, 8, -1, 1, -9, -7, 7, 9};
 
+    // UUR, URR, DRR, DDR, DDL, DLL, ULL, UUL
+    int[] knightOffsets = {-15, -6, 10, 17, 15, 6, -10, -17};
+
     //contains the number of squares to the edge in each direction
     //first number is the index
     //second is the direction: Up, down, left, right, UL, UR, DL, DR
@@ -50,7 +53,7 @@ public class MoveGenerator {
         }
     }
 
-    public void generateSquaresToEdge() {
+    private void generateSquaresToEdge() {
          for (int index = 0; index < 64; index++) {
             int row = (index - (index%8)) / 8;
             int col = index - 8*row;
@@ -71,6 +74,20 @@ public class MoveGenerator {
         }
     }
 
+    //checks if the move doesnt wrap around the board
+    private boolean wrapsBoard(Move move) {
+        int startingIndex = move.startSquare;
+        int targetIndex = move.targetSquare;
+
+        int startRow = (startingIndex - (startingIndex % 8)) / 8;
+        int startCol = startingIndex - 8 * startRow;
+
+        int attackedRow = (targetIndex - (targetIndex % 8)) / 8;
+        int attackedCol = targetIndex - 8 * attackedRow;
+
+        return Math.abs(attackedCol - startCol) > 2;
+    }
+
     private List<Move> generateSlidingMoves(int startingIndex, Piece piece) {
         List<Move> moves = new ArrayList<>();
     
@@ -85,10 +102,8 @@ public class MoveGenerator {
                 Piece targetPiece = board.square[targetSquare];
                 boolean targetIsEmpty = targetPiece.ID == Piece.emptyTile.ID;
 
-                System.out.println("Target Square Index: " + targetSquare + " contains piece: " + targetPiece.ID);
                 
                 if (isWhite == targetPiece.isWhite() && !targetIsEmpty) {
-                    System.out.println("Failed Color Check");
                     break;
                 }
 
@@ -101,15 +116,10 @@ public class MoveGenerator {
         }
         System.out.println("Sliding moves length: " + moves.size());
 
-        for(int i = 0; i < moves.size(); i++) {
-            System.out.println("Start Square: " + moves.get(i).startSquare + " Target Square: " + moves.get(i).targetSquare);
-
-        }
-
         return moves;
     }
 
-    public List<Move> generatePawnMoves(int startingIndex) {
+    private List<Move> generatePawnMoves(int startingIndex) {
         List<Move> moves = new ArrayList<>();
 
         boolean isWhitePawn = board.square[startingIndex].isWhite();
@@ -145,8 +155,61 @@ public class MoveGenerator {
         return moves;
     }
 
+    private List<Move> generateKingMoves(int startingIndex) {
+        List<Move> moves = new ArrayList<>();
 
-    //TODO: Generate knight, king, castlings, en pessant, and make sure king isn't in check
+        boolean isWhiteKing = board.square[startingIndex].isWhite();
+
+        for(int i = 0; i < 8; i++) {
+            int attackedIndex = startingIndex + directionOffsets[i];
+
+            Move newMove = new Move(startingIndex, attackedIndex);
+
+            if(attackedIndex > 63 || attackedIndex < 0 || wrapsBoard(newMove)) {
+                continue;
+            }
+
+            Piece attackedPiece = board.square[attackedIndex];
+
+            if (attackedPiece.ID != 0 && attackedPiece.isWhite() == isWhiteKing) continue;
+
+            moves.add(newMove);
+        }
+
+        return moves;
+    }
+
+    private List<Move> generateKnightMoves(int startingIndex) {
+        List<Move> moves = new ArrayList<>();
+
+        Piece attackingPiece = board.square[startingIndex];
+        boolean isWhiteKnight = attackingPiece.isWhite();
+
+        for(int i = 0; i < 8; i++) {
+            int attackedIndex = startingIndex + knightOffsets[i];
+
+            Move newMove = new Move(startingIndex, attackedIndex);
+
+            if(attackedIndex > 63 || attackedIndex < 0 || wrapsBoard(newMove)) {
+                continue;
+            }
+
+            Piece attackedPiece = board.square[attackedIndex];
+
+          
+            if(attackedPiece.ID != 0 && attackedPiece.isWhite() == isWhiteKnight) {
+                continue;
+            }
+
+            moves.add(newMove);
+
+        }
+
+        return moves;
+    }
+
+
+    //TODO: Generate castlings, en pessant, and make sure king isn't in check
     public List<Move> generateMoves() {
         List<Move> moves = new ArrayList<>();
    
@@ -155,27 +218,31 @@ public class MoveGenerator {
             Piece piece = board.square[index];
               
             if (piece == Piece.emptyTile) {
-                System.out.println("Index " + index + " is empty");
                 continue;
             }
 
             if (piece.isWhite() != board.whiteToMove) {
-                System.out.println("Index " + index + " is wrong color");
                 continue;
             }
 
-            System.out.println("Attacking piece index: " + index + " contains piece: " + piece.ID);
-
             if(piece.isSlidingPiece()) {
-                System.out.println("Index " + index + " is sliding piece");
                 moves.addAll(generateSlidingMoves(index, piece));
             }
 
             if(piece.isType(Piece.pawn)) {
                 moves.addAll(generatePawnMoves(index));
             }
+
+            if(piece.isType(Piece.knight)) {
+                moves.addAll(generateKnightMoves(index));
+            }
+
+            if(piece.isType(Piece.king)){
+                moves.addAll(generateKingMoves(index));
+            }
         }
        
+        System.out.println("Total Legal Moves: " + moves.size());
         return moves;
     }
 
