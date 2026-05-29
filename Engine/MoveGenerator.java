@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+
 public class MoveGenerator {
     //Up, down, left, right, UL, UR, DL, DR
     int[] directionOffsets = {-8, 8, -1, 1, -9, -7, 7, 9};
@@ -17,8 +18,12 @@ public class MoveGenerator {
     int[][] numSquaresToEdge = new int[64][8];
 
     Board board;
+    private final Move whiteKingsideCastle = new Move(60, 62);
+    private final Move whiteQueensideCastle = new Move(60, 58);
+    private final Move blackKingsideCastle = new Move(4, 6);
+    private final Move blackQueensideCastle = new Move(4, 2);
 
-   
+
     public MoveGenerator() {
         generateSquaresToEdge();
         board = Board.createBoard();
@@ -99,7 +104,7 @@ public class MoveGenerator {
             for (int dist = 1; dist <= numSquaresToEdge[startingIndex][directionIndex]; dist++) {
                 int targetSquare = startingIndex + (dist * directionOffsets[directionIndex]);
 
-                Piece targetPiece = board.square[targetSquare];
+                Piece targetPiece = board.getPieceAtIndex(targetSquare);
                 boolean targetIsEmpty = targetPiece.ID == Piece.emptyTile.ID;
 
                 
@@ -114,7 +119,6 @@ public class MoveGenerator {
             }
             }
         }
-        System.out.println("Sliding moves length: " + moves.size());
 
         return moves;
     }
@@ -122,35 +126,34 @@ public class MoveGenerator {
     private List<Move> generatePawnMoves(int startingIndex) {
         List<Move> moves = new ArrayList<>();
 
-        boolean isWhitePawn = board.square[startingIndex].isWhite();
+        boolean isWhitePawn = board.getPieceAtIndex(startingIndex).isWhite();
 
         int row = (startingIndex - (startingIndex % 8)) / 8;
         boolean onStartSquare = (isWhitePawn && row == 6) || (!isWhitePawn && row == 1);
 
         int directionIndex = isWhitePawn ? directionOffsets[0] : directionOffsets[1];
 
-        if (board.square[startingIndex + directionIndex].ID == 0) {
+        if (board.getPieceAtIndex(startingIndex + directionIndex).ID == 0) {
             moves.add(new Move(startingIndex, startingIndex + directionIndex));
 
-          if (onStartSquare && board.square[startingIndex + 2*directionIndex].ID == 0) {
+          if (onStartSquare && board.getPieceAtIndex(startingIndex + 2*directionIndex).ID == 0) {
             moves.add(new Move(startingIndex, startingIndex + 2*directionIndex));
           }
 
         }
 
-        Piece attackedPiece = board.square[startingIndex + directionIndex - 1];
+        Piece attackedPiece = board.getPieceAtIndex(startingIndex + directionIndex - 1);
         
         if(attackedPiece.ID != 0 && attackedPiece.isWhite() != isWhitePawn) {
             moves.add(new Move(startingIndex, startingIndex + directionIndex - 1));
         }
 
-        attackedPiece = board.square[startingIndex + directionIndex + 1];
+        attackedPiece = board.getPieceAtIndex(startingIndex + directionIndex + 1);
         
         if(attackedPiece.ID != 0 && attackedPiece.isWhite() != isWhitePawn) {
             moves.add(new Move(startingIndex, startingIndex + directionIndex + 1));
         }
 
-        System.out.println("Num Pawn Moves" + moves.size());
 
         return moves;
     }
@@ -158,7 +161,7 @@ public class MoveGenerator {
     private List<Move> generateKingMoves(int startingIndex) {
         List<Move> moves = new ArrayList<>();
 
-        boolean isWhiteKing = board.square[startingIndex].isWhite();
+        boolean isWhiteKing = board.getPieceAtIndex(startingIndex).isWhite();
 
         for(int i = 0; i < 8; i++) {
             int attackedIndex = startingIndex + directionOffsets[i];
@@ -169,12 +172,13 @@ public class MoveGenerator {
                 continue;
             }
 
-            Piece attackedPiece = board.square[attackedIndex];
+            Piece attackedPiece = board.getPieceAtIndex(attackedIndex);
 
             if (attackedPiece.ID != 0 && attackedPiece.isWhite() == isWhiteKing) continue;
 
             moves.add(newMove);
         }
+
 
         return moves;
     }
@@ -182,7 +186,7 @@ public class MoveGenerator {
     private List<Move> generateKnightMoves(int startingIndex) {
         List<Move> moves = new ArrayList<>();
 
-        Piece attackingPiece = board.square[startingIndex];
+        Piece attackingPiece = board.getPieceAtIndex(startingIndex);
         boolean isWhiteKnight = attackingPiece.isWhite();
 
         for(int i = 0; i < 8; i++) {
@@ -194,7 +198,7 @@ public class MoveGenerator {
                 continue;
             }
 
-            Piece attackedPiece = board.square[attackedIndex];
+            Piece attackedPiece = board.getPieceAtIndex(attackedIndex);
 
           
             if(attackedPiece.ID != 0 && attackedPiece.isWhite() == isWhiteKnight) {
@@ -208,20 +212,116 @@ public class MoveGenerator {
         return moves;
     }
 
+    private List<Move> generateCastlingMoves() {
 
-    //TODO: Generate castlings, en pessant, and make sure king isn't in check
-    public List<Move> generateMoves() {
         List<Move> moves = new ArrayList<>();
+        boolean whiteToMove = board.isWhiteToMove();
+
+        //checks if the king and rook involved have moved at anytime during the game
+        boolean canCastleKingside = whiteToMove ? board.canCastle(3) : board.canCastle(1);
+
+        boolean canCastleQueenSide = whiteToMove ? board.canCastle(2) : board.canCastle(0);
+        
+
+        if(!(canCastleKingside || canCastleQueenSide)) {
+            return moves;
+        }
+
+
+        int row = whiteToMove ? 7 : 0;
+
+        //check if the king is castling while in check or through check
+        //checks if it castles into check later
+        canCastleKingside = canCastleKingside && !enemyCanSeeSquare(8*row + 4) && !enemyCanSeeSquare(8*row + 5);
+
+
+        canCastleQueenSide = canCastleKingside && !enemyCanSeeSquare(8*row + 4) && !enemyCanSeeSquare(8*row + 3);
+
+        //checks if there is pieces in the path of the rook and king
+        canCastleKingside = canCastleKingside && (board.getPieceAtIndex(8*row + 5).ID == 0) && (board.getPieceAtIndex(8*row + 6).ID == 0);
+        canCastleQueenSide = canCastleQueenSide && (board.getPieceAtIndex(8*row + 1).ID == 0) && (board.getPieceAtIndex(8*row + 2).ID == 0) && (board.getPieceAtIndex(8*row + 3).ID == 0);
+
+
+        if(canCastleKingside) {
+          moves.add(whiteToMove ? whiteKingsideCastle : blackKingsideCastle);
+        }
+
+        if (canCastleQueenSide) {
+            moves.add(whiteToMove ? whiteQueensideCastle : blackQueensideCastle);
+        }
+
+        return moves;
+
+    }
+
+    private boolean enemyCanSeeSquare(int index) {
+        boolean canSeeSquare = false;
+
+        //switch board color to check if enemy pieces can see king
+        board.switchTurns();
+
+        List<Move> moves = generateMoves(false);
+
+        for(int i = 0; i < moves.size() && !canSeeSquare; i++) {
+            canSeeSquare = moves.get(i).targetSquare == index;
+        }
+
+
+        //switch board color back
+        board.switchTurns();
+
+        return canSeeSquare;
+    }
+
+    private boolean inCheck(Move desiredMove) {
+
+        boolean inCheck = false;
+        int startingIndex = desiredMove.startSquare;  
+        int targetIndex = desiredMove.targetSquare;
+        int kingIndex = 0;
+
+        Piece capturedPiece = board.getPieceAtIndex(targetIndex);
+ 
+        //hypothetical move
+        board.edit(targetIndex, board.getPieceAtIndex(startingIndex));
+        board.edit(startingIndex, Piece.emptyTile);
+
+
+        for(int i = 0; i < 64; i++) {
+            if(board.getPieceAtIndex(i).isType(Piece.king) && board.getPieceAtIndex(i).isWhite() == board.isWhiteToMove()){
+                kingIndex = i;
+                break;
+            }
+        }
+
+        inCheck = enemyCanSeeSquare(kingIndex);
+
+        //undo hypothetical move
+        board.edit(startingIndex, board.getPieceAtIndex(targetIndex));
+        board.edit(targetIndex, capturedPiece);
+
+
+        return inCheck;
+    }
+
+
+    //TODO: Generate en pessant
+    public List<Move> generateMoves() {
+      return generateMoves(true);
+    }
+
+    private List<Move> generateMoves(boolean withCheckLogic) {
+          List<Move> moves = new ArrayList<>();
    
         for (int index = 0; index < 64; index++) {
               
-            Piece piece = board.square[index];
+            Piece piece = board.getPieceAtIndex(index);
               
             if (piece == Piece.emptyTile) {
                 continue;
             }
 
-            if (piece.isWhite() != board.whiteToMove) {
+            if (piece.isWhite() != board.isWhiteToMove()) {
                 continue;
             }
 
@@ -237,14 +337,33 @@ public class MoveGenerator {
                 moves.addAll(generateKnightMoves(index));
             }
 
-            if(piece.isType(Piece.king)){
+            if(piece.isType(Piece.king)){ 
                 moves.addAll(generateKingMoves(index));
             }
         }
+        
+        if(withCheckLogic) {
+
+            moves.addAll(generateCastlingMoves());
+
+
+            int numMovesRemoved = 0;
+
+           for (int i = moves.size() - 1; i >= 0; i--) {
+
+            if(inCheck(moves.get(i))) {
+                numMovesRemoved++;
+                moves.remove(i);
+            }
+           }
+
+            System.out.println("Total Legal Moves: " + moves.size());
+        }
        
-        System.out.println("Total Legal Moves: " + moves.size());
         return moves;
     }
+
+ 
 
     public boolean isLegalMove(int startingIndex, int targetIndex) {
 

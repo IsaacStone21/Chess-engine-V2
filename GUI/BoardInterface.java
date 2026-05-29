@@ -10,6 +10,8 @@ import javax.swing.JPanel;
 import Engine.Board;
 import Engine.FENUtil;
 import Engine.MoveGenerator;
+import Engine.Piece;
+import Engine.MoveGenerator.Move;
 
 
 public class BoardInterface extends JPanel{
@@ -39,7 +41,6 @@ public class BoardInterface extends JPanel{
     image = null;
     imageCorner = new Point(0, 0);
     board = Board.createBoard();
-    board.whiteToMove = true;
 
     this.setSize(8*tileSize + 10, 8*tileSize + 35);
 
@@ -63,7 +64,7 @@ public class BoardInterface extends JPanel{
     }
 
     public void updateBoardInterface() {
-        pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.square));
+        pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
         repaint();
     }
 
@@ -139,13 +140,25 @@ public class BoardInterface extends JPanel{
 
             if ((image != null && isLegalMove) ) {
             pieces[targetIndex] = image;
-            //updateBoard();
-            board.whiteToMove = !board.whiteToMove;
+
+            //check if move castles
+            if(board.getPieceAtIndex(startIndex).isType(Piece.king) && Math.abs(startIndex - targetIndex) == 2) {
+                boolean kingsideCastle = startIndex < targetIndex;
+                int rookOffset = kingsideCastle ? -1 : 1;
+
+                int rookIndex = kingsideCastle ? targetIndex + 1 : targetIndex - 2;
+
+                pieces[targetIndex + rookOffset] = pieces[rookIndex];
+                pieces[rookIndex] = null;
+            }
+
+            board.switchTurns();
 
             row = (targetIndex - (targetIndex % 8)) / 8;
             col = targetIndex - 8*row;
             newX = col*tileSize + offset;
             newY = row*tileSize + offset;
+
 
             board.updateBoard(FENUtil.PNGPositionToFEN(pieces));
 

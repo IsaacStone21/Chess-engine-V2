@@ -9,17 +9,16 @@ import GUI.PiecePNG;
 public class FENUtil {
 
     public static final String startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-    //public static final String startFEN = "rnbqkbnr/8/8/8/8/8/8/RNBQKBNR";
     
-    public static Map<PiecePNG, Character> PNGToCharMap = new HashMap<>();
+    private static Map<PiecePNG, Character> PNGToCharMap = new HashMap<>();
 
-    public static Map<Character, PiecePNG> charToPNGMap = new HashMap<>();
+    private static Map<Character, PiecePNG> charToPNGMap = new HashMap<>();
 
-    public static Map<Character, Integer> charToIDMap = new HashMap<>();
+    private static Map<Character, Integer> charToIDMap = new HashMap<>();
 
-    public static Map<Character, Piece> charToPieceMap = new HashMap<>();
+    private static Map<Character, Piece> charToPieceMap = new HashMap<>();
 
-    public static Map<Integer, Character> pieceToCharMap = new HashMap<>();
+    private static Map<Integer, Character> pieceToCharMap = new HashMap<>();
 
     static {
         initializeMaps();
