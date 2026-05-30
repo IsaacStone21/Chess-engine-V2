@@ -10,7 +10,6 @@ import javax.swing.JPanel;
 import Engine.Board;
 import Engine.FENUtil;
 import Engine.MoveGenerator;
-import Engine.Piece;
 import Engine.MoveGenerator.Move;
 
 
@@ -136,21 +135,14 @@ public class BoardInterface extends JPanel{
             int newX;
             int newY;
 
-            boolean isLegalMove = moveGenerator.isLegalMove(startIndex, targetIndex);
+            Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex);
 
-            if ((image != null && isLegalMove) ) {
-            pieces[targetIndex] = image;
+            if ((image != null && requestedMove != null) ) {
+            //pieces[targetIndex] = image;
 
-            //check if move castles
-            if(board.getPieceAtIndex(startIndex).isType(Piece.king) && Math.abs(startIndex - targetIndex) == 2) {
-                boolean kingsideCastle = startIndex < targetIndex;
-                int rookOffset = kingsideCastle ? -1 : 1;
+            board.logMove(requestedMove);
 
-                int rookIndex = kingsideCastle ? targetIndex + 1 : targetIndex - 2;
-
-                pieces[targetIndex + rookOffset] = pieces[rookIndex];
-                pieces[rookIndex] = null;
-            }
+            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
 
             board.switchTurns();
 
@@ -160,10 +152,9 @@ public class BoardInterface extends JPanel{
             newY = row*tileSize + offset;
 
 
-            board.updateBoard(FENUtil.PNGPositionToFEN(pieces));
+            //board.updateBoard(FENUtil.PNGPositionToFEN(pieces));
 
             } else {
-                System.out.println("Illegal Move");
                 row = (startIndex - (startIndex % 8)) / 8;
                 col = startIndex - 8*row;
                 newX = col*tileSize + offset;

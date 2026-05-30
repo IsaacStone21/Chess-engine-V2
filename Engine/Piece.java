@@ -13,6 +13,8 @@ public class Piece {
     public static final int queen = 5;
     public static final int king = 6;
 
+    public static final int empty = 0;
+
     
     public int ID;
 

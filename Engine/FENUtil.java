@@ -127,7 +127,7 @@ public class FENUtil {
 
         String FENString = FEN.toString();
 
-        System.out.println("FEN Position: " + FENString);
+        //System.out.println("FEN Position: " + FENString);
         return FENString;
     }
 
@@ -229,7 +229,7 @@ public class FENUtil {
 
         String FENString = FEN.toString();
 
-        System.out.println("Position To FEN: " + FENString);
+        //System.out.println("Position To FEN: " + FENString);
         return FENString;
     }
 

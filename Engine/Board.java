@@ -8,7 +8,9 @@ import Engine.MoveGenerator.Move;
 public class Board {
     private boolean whiteToMove;
     private Piece[] square = new Piece[64];
-    public List<Move> acceptedMoves;
+    private List<Move> acceptedMoves;
+    private double numMoves;
+
 
     // sets values inside to false if a king or rook moves
     private boolean[] castlingCheck = new boolean[4];
@@ -25,6 +27,7 @@ public class Board {
             castlingCheck[i] = true; 
         }
 
+        numMoves = 0;
     }
 
 
@@ -41,6 +44,10 @@ public class Board {
 
     public void switchTurns() {
         whiteToMove = !whiteToMove;
+    }
+
+    public double getNumMoves() {
+        return numMoves;
     }
 
 
@@ -61,8 +68,37 @@ public class Board {
    }
 
    public void logMove(Move acceptedMove) {
-    acceptedMoves.add(acceptedMove);
+    acceptedMoves.addLast(acceptedMove);
+    int startIndex = acceptedMove.startSquare;
+    int targetIndex = acceptedMove.targetSquare;
+
+    if(acceptedMove.isEnPessant) {
+        int offset = startIndex > targetIndex ? 8 : -8;
+
+        board.edit(targetIndex + offset, Piece.emptyTile);
+    }
+
+    board.edit(targetIndex, getPieceAtIndex(startIndex));
+    board.edit(startIndex, Piece.emptyTile);
+
+    if(acceptedMove.isCastling) {
+        boolean isWhite = startIndex == 60;
+        Piece rook = isWhite ? new Piece(Piece.white, Piece.rook) : new Piece(Piece.black, Piece.rook);
+
+        edit((startIndex + targetIndex) / 2, rook);
+
+        boolean kingside = targetIndex == 6 || targetIndex == 62;
+        int rookIndex = isWhite ? (kingside ? 63 : 56) : (kingside ? 7 : 0);
+
+        edit(rookIndex, Piece.emptyTile);
+    }
+
+    numMoves++;
     updateCastlingCheck(acceptedMove);
+   }
+
+   public Move getLastMove() {
+    return acceptedMoves.get(acceptedMoves.size() - 1);
    }
 
    private void updateCastlingCheck(Move move) {
