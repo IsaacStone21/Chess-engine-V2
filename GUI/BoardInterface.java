@@ -6,11 +6,12 @@ import java.awt.Point;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import Engine.Board;
 import Engine.FENUtil;
 import Engine.MoveGenerator;
-import Engine.MoveGenerator.Move;
 
 
 public class BoardInterface extends JPanel{
@@ -34,6 +35,9 @@ public class BoardInterface extends JPanel{
     int index;
     final int offset = 5;
 
+    boolean playerIsWhite;
+    boolean draggable;
+
 
     public BoardInterface() {
 
@@ -49,7 +53,22 @@ public class BoardInterface extends JPanel{
         DragListener dragListener = new DragListener();
         this.addMouseMotionListener(dragListener);
 
-        
+        String[] options = {"White", "Black"};
+
+       
+
+          playerIsWhite = JOptionPane.showOptionDialog(null, "What color would you like to be?",
+         "Color Selector", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE,
+          LaunchPage.blackPawnPNG, options, 0) == 0;
+
+          board.setPlayerColor(playerIsWhite);
+
+          if (!playerIsWhite) {
+            board.logMove(getBoardMove());
+            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+            System.out.println("Here8");
+            repaint();
+          }
     }
 
    
@@ -60,6 +79,15 @@ public class BoardInterface extends JPanel{
     public void updateBoard() {
         board.setPositionFromFEN(FENUtil.startFEN);
 
+    }
+
+    public Engine.Move getBoardMove() {
+        var legalMoves = moveGenerator.generateMoves();
+
+        
+        int randomIndex = (int)(Math.random()*legalMoves.size());
+
+        return legalMoves.get(randomIndex);
     }
 
     public void updateBoardInterface() {
@@ -114,6 +142,7 @@ public class BoardInterface extends JPanel{
         public void mousePressed(MouseEvent e) {
             prevPt = e.getPoint();
             int index = getIndex(prevPt);
+        if (playerIsWhite == FENUtil.FENtoPosition(FENUtil.PNGPositionToFEN(pieces))[index].isWhite() && pieces[index] != null){
             startIndex = index;
             image = pieces[index];
             pieces[index] = null;
@@ -124,35 +153,40 @@ public class BoardInterface extends JPanel{
             int newY = row*tileSize + offset;
 
             imageCorner = new Point(newX, newY);
-
+            draggable = true;
+            } else {
+                draggable = false;
+            }
         }
 
         public void mouseReleased(MouseEvent e) {
-            int targetIndex = getIndex(currentPoint);
+            if(draggable) {
+                int targetIndex = getIndex(currentPoint);
 
             int row;
             int col;
             int newX;
             int newY;
 
-            Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex);
+            Engine.Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex);
+            System.out.println("Here5");
 
             if ((image != null && requestedMove != null) ) {
-            //pieces[targetIndex] = image;
 
             board.logMove(requestedMove);
-
-            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
-
-            board.switchTurns();
+            System.out.println("Here6");
 
             row = (targetIndex - (targetIndex % 8)) / 8;
             col = targetIndex - 8*row;
             newX = col*tileSize + offset;
             newY = row*tileSize + offset;
 
+            //gets random moves from engine
+            board.logMove(getBoardMove());
+            
+            repaint();
 
-            //board.updateBoard(FENUtil.PNGPositionToFEN(pieces));
+            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
 
             } else {
                 row = (startIndex - (startIndex % 8)) / 8;
@@ -161,23 +195,25 @@ public class BoardInterface extends JPanel{
                 newY = row*tileSize + offset;
                 pieces[startIndex] = image;
             }
-            
-            
+                        
             imageCorner = new Point(newX, newY);
 
-            
             repaint();
+            }
+            System.out.println("Num Moves played: " + board.getNumMoves());
         }
     }
 
     private class DragListener extends MouseMotionAdapter { 
         public void mouseDragged(MouseEvent e) {
+           if(draggable){
             currentPoint = e.getPoint();
 
             imageCorner.translate((int)(currentPoint.getX() - prevPt.getX()), (int)(currentPoint.getY() - prevPt.getY()));
 
             prevPt = currentPoint;
             repaint();
+           } 
         }
     }
     

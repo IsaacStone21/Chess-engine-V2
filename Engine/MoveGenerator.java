@@ -2,7 +2,6 @@ package Engine;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 
 public class MoveGenerator {
@@ -18,55 +17,15 @@ public class MoveGenerator {
     int[][] numSquaresToEdge = new int[64][8];
 
     Board board;
-    private final Move whiteKingsideCastle = new Move(60, 62, false, true);
-    private final Move whiteQueensideCastle = new Move(60, 58, false, true);
-    private final Move blackKingsideCastle = new Move(4, 6, false, true);
-    private final Move blackQueensideCastle = new Move(4, 2, false, true);
+    private final Move whiteKingsideCastle = new Move(60, 62, false, true, false);
+    private final Move whiteQueensideCastle = new Move(60, 58, false, true, false);
+    private final Move blackKingsideCastle = new Move(4, 6, false, true, false);
+    private final Move blackQueensideCastle = new Move(4, 2, false, true, false);
 
 
     public MoveGenerator() {
         generateSquaresToEdge();
         board = Board.createBoard();
-    }
-
-    public class Move{
-        public int startSquare;
-        public int targetSquare;
-        public boolean isEnPessant;
-        public boolean isCastling;
-
-        public Move(int startIndex, int targetIndex) {
-            startSquare = startIndex;
-            targetSquare = targetIndex;
-            isEnPessant = false;
-            isCastling = false;
-        }
-
-        public Move(int startIndex, int targetIndex, boolean enPessantMove, boolean castlingMove) {
-            startSquare = startIndex;
-            targetSquare = targetIndex;
-            isEnPessant = enPessantMove;
-            isCastling = castlingMove;
-        }
-
-        @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-
-        Move other = (Move) obj;
-
-        return startSquare == other.startSquare &&
-               targetSquare == other.targetSquare;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(startSquare, targetSquare);
-        }
     }
 
     private void generateSquaresToEdge() {
@@ -175,6 +134,7 @@ public class MoveGenerator {
             moves.add(new Move(startingIndex, startingIndex + directionIndex + 1));
         }
 
+        System.out.println("Here2");
         return moves;
     }
 
@@ -203,17 +163,17 @@ public class MoveGenerator {
 
         boolean isCorrectPawn = board.getPieceAtIndex(endIndex + directionOffsets[2]).isWhite() == whiteToMove && board.getPieceAtIndex(endIndex + directionOffsets[2]).isType(Piece.pawn);
         if(isCorrectPawn) {
-            moves.add(new Move(endIndex + directionOffsets[2], endIndex - offset, true, false));
+            moves.add(new Move(endIndex + directionOffsets[2], endIndex - offset, true, false, false));
             System.out.println("en pessant available");
         }
 
             isCorrectPawn = board.getPieceAtIndex(endIndex + directionOffsets[3]).isWhite() == whiteToMove && board.getPieceAtIndex(endIndex + directionOffsets[3]).isType(Piece.pawn);        
 
         if(isCorrectPawn) {
-            moves.add(new Move(endIndex + directionOffsets[3], endIndex - offset, true, false));
+            moves.add(new Move(endIndex + directionOffsets[3], endIndex - offset, true, false, false));
             System.out.println("en pessant available");
         }
-
+        System.out.println("Here1");
         return moves;
     } 
 
@@ -363,6 +323,22 @@ public class MoveGenerator {
         return inCheck;
     }
 
+    private boolean inCheck() {
+        boolean inCheck = false;
+        int kingIndex = 0;
+
+        for(int i = 0; i < 64; i++) {
+            if(board.getPieceAtIndex(i).isType(Piece.king) && board.getPieceAtIndex(i).isWhite() == board.isWhiteToMove()){
+                kingIndex = i;
+                break;
+            }
+        }
+
+        inCheck = enemyCanSeeSquare(kingIndex);
+
+        return inCheck;
+    }
+
 
     //TODO: Generate pawn promotions
     public List<Move> generateMoves() {
@@ -389,11 +365,22 @@ public class MoveGenerator {
             }
 
             if(piece.isType(Piece.pawn)) {
-                moves.addAll(generatePawnAttackMoves(index));
+                List<Move> pawnMoves = new ArrayList<>();
+                pawnMoves.addAll(generatePawnAttackMoves(index));
 
                 if(withCheckLogic) {
-                    moves.addAll(generatePawnMovementMoves(index));
+                    pawnMoves.addAll(generatePawnMovementMoves(index));
                 }
+                for(int i = 0; i < pawnMoves.size(); i++) {
+                    if(pawnMoves.get(i).targetSquare >= 56 || pawnMoves.get(i).targetSquare <= 7) {
+                        Move move = pawnMoves.get(i);
+                        moves.add(new Move(move.startSquare, move.targetSquare, false, false, true));
+                        pawnMoves.remove(i);
+                    }
+                }
+                System.out.println("Here3");
+                moves.addAll(pawnMoves);
+                System.out.println("Here4");
             }
 
             if(piece.isType(Piece.knight)) {
@@ -416,8 +403,6 @@ public class MoveGenerator {
                 moves.remove(i);
             }
            }
-
-            System.out.println("Total Legal Moves: " + moves.size());
         }
        
         return moves;
@@ -449,5 +434,21 @@ public class MoveGenerator {
             }
         }
         return null;
+    }
+
+    public enum GameStatus {
+    ONGOING,
+    CHECKMATE,
+    STALEMATE
+    }
+
+    public GameStatus getGameStatus() {
+        if(generateMoves().size() != 0) {
+            return GameStatus.ONGOING;
+        } else if(inCheck()) {
+            return GameStatus.CHECKMATE;
+        } else {
+            return GameStatus.STALEMATE;
+        }
     }
 }

@@ -40,7 +40,7 @@ public class LaunchPage {
 
         frame.add(window);
 
-            window.updateBoard();
+        window.updateBoard();
 
         frame.setVisible(true);
     }

@@ -3,13 +3,13 @@ package Engine;
 import java.util.ArrayList;
 import java.util.List;
 
-import Engine.MoveGenerator.Move;
 
 public class Board {
     private boolean whiteToMove;
     private Piece[] square = new Piece[64];
     private List<Move> acceptedMoves;
-    private double numMoves;
+    private int numMoves;
+    private Boolean playerIsWhite;
 
 
     // sets values inside to false if a king or rook moves
@@ -30,6 +30,12 @@ public class Board {
         numMoves = 0;
     }
 
+    public void setPlayerColor(boolean white) {
+        if (playerIsWhite == null) {
+            playerIsWhite = white;
+        } 
+    }
+
 
     public static Board createBoard() {
         if (board == null) {
@@ -46,7 +52,7 @@ public class Board {
         whiteToMove = !whiteToMove;
     }
 
-    public double getNumMoves() {
+    public int getNumMoves() {
         return numMoves;
     }
 
@@ -93,8 +99,13 @@ public class Board {
         edit(rookIndex, Piece.emptyTile);
     }
 
+    if(acceptedMove.isPromotion) {
+        edit(acceptedMove.targetSquare, new Piece(acceptedMove.targetSquare <= 7 ? Piece.white : Piece.black, Piece.queen));
+    }
+
     numMoves++;
     updateCastlingCheck(acceptedMove);
+    switchTurns();
    }
 
    public Move getLastMove() {
@@ -136,5 +147,9 @@ public class Board {
         square = FENUtil.FENtoPosition(FEN);
     }
 
-    
+    public enum GameStatus {
+    ONGOING,
+    CHECKMATE,
+    STALEMATE
+    }
 }
