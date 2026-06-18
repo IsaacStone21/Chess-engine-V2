@@ -2,6 +2,7 @@ package Engine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 
 public class Board {
@@ -9,7 +10,6 @@ public class Board {
     private Piece[] square = new Piece[64];
     private List<Move> acceptedMoves;
     private int numMoves;
-    private Boolean playerIsWhite;
 
 
     // sets values inside to false if a king or rook moves
@@ -30,11 +30,6 @@ public class Board {
         numMoves = 0;
     }
 
-    public void setPlayerColor(boolean white) {
-        if (playerIsWhite == null) {
-            playerIsWhite = white;
-        } 
-    }
 
 
     public static Board createBoard() {
@@ -55,7 +50,6 @@ public class Board {
     public int getNumMoves() {
         return numMoves;
     }
-
 
    public void updateBoard(String FEN) {
     square = FENUtil.FENtoPosition(FEN);
@@ -141,15 +135,9 @@ public class Board {
    public boolean canCastle(int index) {
     return castlingCheck[index];
    }
-
     
     public void setPositionFromFEN(String FEN) {
         square = FENUtil.FENtoPosition(FEN);
     }
 
-    public enum GameStatus {
-    ONGOING,
-    CHECKMATE,
-    STALEMATE
-    }
 }

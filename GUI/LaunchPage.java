@@ -6,7 +6,7 @@ import Engine.FENUtil;
 public class LaunchPage {
     private JFrame frame;
     
-    private BoardInterface window;
+    private GameManager window;
    
 
     public static PiecePNG blackPawnPNG = new PiecePNG("GUI\\PNGs\\Black_Pawn.png", false, false);
@@ -32,26 +32,12 @@ public class LaunchPage {
         frame.setTitle("Chess");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         
-        window = new BoardInterface();
+        window = new GameManager();
         
         window.setVisible(true);
-        
-        setStartPosition();
 
         frame.add(window);
 
-        window.updateBoard();
-
         frame.setVisible(true);
-    }
-
-   
-    public void setStartPosition() {
-
-        PiecePNG[] startPosition = FENUtil.FENtoPNGPosition(FENUtil.startFEN);
-        for (int i = 0; i < 64; i++) {
-            window.setTile(startPosition[i], i);
-        }
-        window.repaint();
     }
 }

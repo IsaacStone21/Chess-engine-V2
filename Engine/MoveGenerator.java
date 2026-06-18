@@ -2,6 +2,7 @@ package Engine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 
 public class MoveGenerator {
@@ -17,15 +18,19 @@ public class MoveGenerator {
     int[][] numSquaresToEdge = new int[64][8];
 
     Board board;
+    private Random random;
     private final Move whiteKingsideCastle = new Move(60, 62, false, true, false);
     private final Move whiteQueensideCastle = new Move(60, 58, false, true, false);
     private final Move blackKingsideCastle = new Move(4, 6, false, true, false);
     private final Move blackQueensideCastle = new Move(4, 2, false, true, false);
 
+    List<Long> times = new ArrayList<>();
+
 
     public MoveGenerator() {
         generateSquaresToEdge();
         board = Board.createBoard();
+        random = new Random();
     }
 
     private void generateSquaresToEdge() {
@@ -62,6 +67,19 @@ public class MoveGenerator {
 
         return Math.abs(attackedCol - startCol) > 2;
     }
+
+     public Move getBoardMove() {
+        var moves = generateMoves();
+
+        Move move = moves.get(random.nextInt(moves.size()));
+
+        return move;
+    }
+
+    public int getNumLegalMoves() {
+        return generateMoves().size();
+    }
+
 
     private List<Move> generateSlidingMoves(int startingIndex, Piece piece) {
         List<Move> moves = new ArrayList<>();
@@ -117,6 +135,9 @@ public class MoveGenerator {
 
     private List<Move> generatePawnAttackMoves(int startingIndex) {
         List<Move> moves = new ArrayList<>();
+            if(startingIndex <= 7 || startingIndex >= 56) {
+                return moves;
+            }
         boolean isWhitePawn = board.isWhiteToMove();
 
         int directionIndex = isWhitePawn ? directionOffsets[0] : directionOffsets[1];
@@ -134,11 +155,10 @@ public class MoveGenerator {
             moves.add(new Move(startingIndex, startingIndex + directionIndex + 1));
         }
 
-        System.out.println("Here2");
         return moves;
     }
 
-    public List<Move> generateEnPessant() {
+    private List<Move> generateEnPessant() {
         List<Move> moves = new ArrayList<>();
 
         if (board.getNumMoves() == 0) {
@@ -173,7 +193,6 @@ public class MoveGenerator {
             moves.add(new Move(endIndex + directionOffsets[3], endIndex - offset, true, false, false));
             System.out.println("en pessant available");
         }
-        System.out.println("Here1");
         return moves;
     } 
 
@@ -323,7 +342,7 @@ public class MoveGenerator {
         return inCheck;
     }
 
-    private boolean inCheck() {
+    public boolean inCheck() {
         boolean inCheck = false;
         int kingIndex = 0;
 
@@ -340,9 +359,23 @@ public class MoveGenerator {
     }
 
 
-    //TODO: Generate pawn promotions
     public List<Move> generateMoves() {
-      return generateMoves(true);
+    long startTime = System.nanoTime();
+      var moves =  generateMoves(true);
+    long finishTime = System.nanoTime();
+
+    times.add(finishTime - startTime);
+    long sum = 0;
+
+    for(int i = 0; i < times.size(); i++) {
+        sum += times.get(i);
+    }
+
+    long avg = sum / times.size();
+
+    System.out.println("Average time to compute: " + avg + " nanoseconds");
+
+    return moves;
     }
 
     private List<Move> generateMoves(boolean withCheckLogic) {
@@ -371,6 +404,7 @@ public class MoveGenerator {
                 if(withCheckLogic) {
                     pawnMoves.addAll(generatePawnMovementMoves(index));
                 }
+                //promotion check
                 for(int i = 0; i < pawnMoves.size(); i++) {
                     if(pawnMoves.get(i).targetSquare >= 56 || pawnMoves.get(i).targetSquare <= 7) {
                         Move move = pawnMoves.get(i);
@@ -378,9 +412,9 @@ public class MoveGenerator {
                         pawnMoves.remove(i);
                     }
                 }
-                System.out.println("Here3");
+
                 moves.addAll(pawnMoves);
-                System.out.println("Here4");
+
             }
 
             if(piece.isType(Piece.knight)) {
@@ -434,21 +468,5 @@ public class MoveGenerator {
             }
         }
         return null;
-    }
-
-    public enum GameStatus {
-    ONGOING,
-    CHECKMATE,
-    STALEMATE
-    }
-
-    public GameStatus getGameStatus() {
-        if(generateMoves().size() != 0) {
-            return GameStatus.ONGOING;
-        } else if(inCheck()) {
-            return GameStatus.CHECKMATE;
-        } else {
-            return GameStatus.STALEMATE;
-        }
     }
 }

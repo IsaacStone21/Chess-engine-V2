@@ -2,6 +2,7 @@ package GUI;
 
 import java.awt.Color;
 import java.awt.Graphics;
+import java.awt.List;
 import java.awt.Point;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
@@ -11,18 +12,17 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import Engine.Board;
 import Engine.FENUtil;
+import Engine.Move;
 import Engine.MoveGenerator;
 
 
-public class BoardInterface extends JPanel{
+public class GameManager extends JPanel{
 
     private int tileSize = LaunchPage.tileSize;
     private final Color white = new Color(0xcba88a);
     private final Color black = new Color(0x8b5122);
 
     PiecePNG pieces[] = new PiecePNG[64];
-    Board board;
-    MoveGenerator moveGenerator = new MoveGenerator();
    
     int startIndex;
     int targetIndex;
@@ -35,15 +35,26 @@ public class BoardInterface extends JPanel{
     int index;
     final int offset = 5;
 
-    boolean playerIsWhite;
     boolean draggable;
 
+    private enum GameStatus {
+        ONGOING,
+        CHECKMATE,
+        STALEMATE
+    }
 
-    public BoardInterface() {
+    private boolean playerIsWhite;
+    private GameStatus gameStatus;
+
+
+    private Board board;
+    private MoveGenerator moveGenerator;
+
+
+    public GameManager() {
 
     image = null;
     imageCorner = new Point(0, 0);
-    board = Board.createBoard();
 
     this.setSize(8*tileSize + 10, 8*tileSize + 35);
 
@@ -53,58 +64,64 @@ public class BoardInterface extends JPanel{
         DragListener dragListener = new DragListener();
         this.addMouseMotionListener(dragListener);
 
+        board = Board.createBoard();
+        moveGenerator = new MoveGenerator();
+
         String[] options = {"White", "Black"};
 
-       
-
+        //sets player color
           playerIsWhite = JOptionPane.showOptionDialog(null, "What color would you like to be?",
          "Color Selector", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE,
           LaunchPage.blackPawnPNG, options, 0) == 0;
 
-          board.setPlayerColor(playerIsWhite);
+        //   board.setPlayerColor(playerIsWhite);
 
           if (!playerIsWhite) {
-            board.logMove(getBoardMove());
+            board.logMove(moveGenerator.getBoardMove());
             pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
-            System.out.println("Here8");
-            repaint();
+
           }
+
+        gameStatus = GameStatus.ONGOING;
+
+        updateBoardInterface();
     }
 
-   
-    public void setTile(PiecePNG newPiece, int index) {
-        pieces[index] = newPiece;
-        }
 
-    public void updateBoard() {
-        board.setPositionFromFEN(FENUtil.startFEN);
-
-    }
-
-    public Engine.Move getBoardMove() {
-        var legalMoves = moveGenerator.generateMoves();
-
-        
-        int randomIndex = (int)(Math.random()*legalMoves.size());
-
-        return legalMoves.get(randomIndex);
-    }
-
-    public void updateBoardInterface() {
+    private void updateBoardInterface() {
         pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
-        repaint();
+        repaint(); 
     }
 
-        public int getIndex(Point point) {
+    private void updateGameStatus() {
+        if(moveGenerator.getNumLegalMoves() != 0) {
+            gameStatus = GameStatus.ONGOING; 
+        } else if(moveGenerator.inCheck()) {
+            gameStatus = GameStatus.CHECKMATE;
+        } else {
+            gameStatus = GameStatus.STALEMATE;
+        }
+    }
+
+    private void endGame() {
+        if (gameStatus == GameStatus.CHECKMATE) {
+            //display victor
+        } else {
+            //close program
+        }
+    }
+
+    private void playMove(Move move) {
+        board.logMove(move);
+        updateBoardInterface();
+    }
+
+    private int getIndex(Point point) {
             double row = (point.getY() - point.getY()%tileSize)/ tileSize;
             double col = (point.getX() - point.getX()%tileSize)/ tileSize;
 
             int index = (int)(8*row + col);
             return index;
-        }
-
-        public PiecePNG[] getBoard() {
-            return pieces;
         }
 
 
@@ -138,6 +155,7 @@ public class BoardInterface extends JPanel{
         }
     }
 
+
     private class ClickListener extends MouseAdapter{
         public void mousePressed(MouseEvent e) {
             prevPt = e.getPoint();
@@ -168,25 +186,26 @@ public class BoardInterface extends JPanel{
             int newX;
             int newY;
 
-            Engine.Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex);
-            System.out.println("Here5");
+            Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex);
+
 
             if ((image != null && requestedMove != null) ) {
-
-            board.logMove(requestedMove);
-            System.out.println("Here6");
 
             row = (targetIndex - (targetIndex % 8)) / 8;
             col = targetIndex - 8*row;
             newX = col*tileSize + offset;
             newY = row*tileSize + offset;
-
-            //gets random moves from engine
-            board.logMove(getBoardMove());
             
-            repaint();
+
 
             pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+
+            //player move
+            playMove(requestedMove);
+
+            playMove(moveGenerator.getBoardMove());
+
+            image = null;
 
             } else {
                 row = (startIndex - (startIndex % 8)) / 8;
@@ -194,6 +213,8 @@ public class BoardInterface extends JPanel{
                 newX = col*tileSize + offset;
                 newY = row*tileSize + offset;
                 pieces[startIndex] = image;
+                image = null;
+                draggable = false;
             }
                         
             imageCorner = new Point(newX, newY);
