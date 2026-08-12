@@ -197,7 +197,7 @@ public class FENUtil {
             return position;
         }
 
-        public static String positionToFEN(Piece[] piece){
+        public static String positionToFEN(Position position){
         StringBuilder FEN = new StringBuilder();
         int index;
         int emptyTiles = 0;
@@ -209,7 +209,7 @@ public class FENUtil {
             for(int col = 0; col < 8; col++) {
                 index = 8*row + col;
                 
-                Character pieceType = pieceToCharMap.get(piece[index].ID);
+                Character pieceType = pieceToCharMap.get(position.getPieceAtIndex(index).ID);
 
                 if(pieceType.equals('e')) {
                     emptyTiles++;

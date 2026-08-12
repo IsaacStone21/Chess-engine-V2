@@ -1,6 +1,7 @@
 package GUI;
 
 import java.awt.Color;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.List;
 import java.awt.Point;
@@ -8,6 +9,7 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import Engine.Board;
@@ -35,7 +37,8 @@ public class GameManager extends JPanel{
     int index;
     final int offset = 5;
 
-    boolean draggable;
+    private boolean draggable;
+    private boolean GAMEDISABLED = false;
 
     private enum GameStatus {
         ONGOING,
@@ -77,8 +80,8 @@ public class GameManager extends JPanel{
         //   board.setPlayerColor(playerIsWhite);
 
           if (!playerIsWhite) {
-            board.logMove(moveGenerator.getBoardMove());
-            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+            playMove(moveGenerator.getBoardMove());
+            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(Board.getPosition()));
 
           }
 
@@ -89,7 +92,7 @@ public class GameManager extends JPanel{
 
 
     private void updateBoardInterface() {
-        pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+        pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(Board.getPosition()));
         repaint(); 
     }
 
@@ -105,10 +108,62 @@ public class GameManager extends JPanel{
 
     private void endGame() {
         if (gameStatus == GameStatus.CHECKMATE) {
-            //display victor
-        } else {
+                JPanel endScreen = new JPanel(null);
+
+                int frameWidth = 250;
+                int frameHeight = 125;
+
+                // Center it on the 800x800 chess board
+                int x = (8 * tileSize - frameWidth) / 2;
+                int y = (8 * tileSize - frameHeight) / 2;
+
+                endScreen.setBounds(x, y, frameWidth, frameHeight);
+                endScreen.setBackground(Color.WHITE);
+
+                JLabel checkmateText = new JLabel("CHECKMATE!");
+                checkmateText.setFont(new Font("Arial", Font.BOLD, 24));
+
+                // Center the label manually
+                checkmateText.setBounds(35, 40, 180, 40);
+
+                endScreen.add(checkmateText);
+
+                add(endScreen);
+
+                revalidate();
+                repaint();
+
+               
+    } else if(gameStatus == GameStatus.STALEMATE) {
+        JPanel endScreen = new JPanel(null);
+
+                int frameWidth = 250;
+                int frameHeight = 125;
+
+                // Center it on the 800x800 chess board
+                int x = (8 * tileSize - frameWidth) / 2;
+                int y = (8 * tileSize - frameHeight) / 2;
+
+                endScreen.setBounds(x, y, frameWidth, frameHeight);
+                endScreen.setBackground(Color.WHITE);
+
+                JLabel checkmateText = new JLabel("Stalemate!");
+                checkmateText.setFont(new Font("Arial", Font.BOLD, 24));
+
+                // Center the label manually
+                checkmateText.setBounds(35, 40, 180, 40);
+
+                endScreen.add(checkmateText);
+
+                add(endScreen);
+
+                revalidate();
+                repaint();
+    }
+         else {
             //close program
         }
+        GAMEDISABLED = true;
     }
 
     private void playMove(Move move) {
@@ -158,9 +213,11 @@ public class GameManager extends JPanel{
 
     private class ClickListener extends MouseAdapter{
         public void mousePressed(MouseEvent e) {
+
+        if(!GAMEDISABLED) {
             prevPt = e.getPoint();
             int index = getIndex(prevPt);
-        if (playerIsWhite == FENUtil.FENtoPosition(FENUtil.PNGPositionToFEN(pieces))[index].isWhite() && pieces[index] != null){
+        if (playerIsWhite == Board.getPosition().getPieceAtIndex(index).isWhite() && pieces[index] != null){
             startIndex = index;
             image = pieces[index];
             pieces[index] = null;
@@ -176,9 +233,9 @@ public class GameManager extends JPanel{
                 draggable = false;
             }
         }
-
+    }
         public void mouseReleased(MouseEvent e) {
-            if(draggable) {
+            if(draggable && !GAMEDISABLED) {
                 int targetIndex = getIndex(currentPoint);
 
             int row;
@@ -203,6 +260,12 @@ public class GameManager extends JPanel{
             //player move
             playMove(requestedMove);
 
+            updateGameStatus();
+
+            if (gameStatus != GameStatus.ONGOING) {
+               endGame();
+               return;
+            }
             playMove(moveGenerator.getBoardMove());
 
             image = null;
@@ -227,7 +290,7 @@ public class GameManager extends JPanel{
 
     private class DragListener extends MouseMotionAdapter { 
         public void mouseDragged(MouseEvent e) {
-           if(draggable){
+           if(draggable && !GAMEDISABLED){
             currentPoint = e.getPoint();
 
             imageCorner.translate((int)(currentPoint.getX() - prevPt.getX()), (int)(currentPoint.getY() - prevPt.getY()));

@@ -27,16 +27,17 @@ public class LaunchPage {
  
     public LaunchPage() {
         frame = new JFrame();
+        frame.setLayout(null);
         frame.setSize(8*tileSize + 10, 8*tileSize + 35);
         
         frame.setTitle("Chess");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         
         window = new GameManager();
+        window.setLayout(null);
         
-        window.setVisible(true);
-
         frame.add(window);
+        window.setVisible(true);
 
         frame.setVisible(true);
     }
