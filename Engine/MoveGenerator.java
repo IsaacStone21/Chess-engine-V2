@@ -2,7 +2,6 @@ package Engine;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 
 public class MoveGenerator {
@@ -17,8 +16,7 @@ public class MoveGenerator {
     //second is the direction: Up, down, left, right, UL, UR, DL, DR
     int[][] numSquaresToEdge = new int[64][8];
 
-    Board board;
-    private Random random;
+
     private final Move whiteKingsideCastle = new Move(60, 62, false, true, false);
     private final Move whiteQueensideCastle = new Move(60, 58, false, true, false);
     private final Move blackKingsideCastle = new Move(4, 6, false, true, false);
@@ -29,8 +27,6 @@ public class MoveGenerator {
 
     public MoveGenerator() {
         generateSquaresToEdge();
-        board = Board.createBoard();
-        random = new Random();
     }
 
     private void generateSquaresToEdge() {
@@ -68,20 +64,13 @@ public class MoveGenerator {
         return Math.abs(attackedCol - startCol) > 2;
     }
 
-     public Move getBoardMove() {
-        var moves = generateMoves();
 
-        Move move = moves.get(random.nextInt(moves.size()));
-
-        return move;
-    }
-
-    public int getNumLegalMoves() {
-        return generateMoves().size();
+    public int getNumLegalMoves(Position currentPosition) {
+        return generateMoves(currentPosition).size();
     }
 
 
-    private List<Move> generateSlidingMoves(int startingIndex, Piece piece) {
+    private List<Move> generateSlidingMoves(int startingIndex, Piece piece, Position currentPosition) {
         List<Move> moves = new ArrayList<>();
     
         int startDirIndex = piece.isType(Piece.bishop) ? 4 : 0;
@@ -92,7 +81,7 @@ public class MoveGenerator {
             for (int dist = 1; dist <= numSquaresToEdge[startingIndex][directionIndex]; dist++) {
                 int targetSquare = startingIndex + (dist * directionOffsets[directionIndex]);
 
-                Piece targetPiece = board.getPieceAtIndex(targetSquare);
+                Piece targetPiece = currentPosition.getPieceAtIndex(targetSquare);
                 boolean targetIsEmpty = targetPiece.ID == Piece.emptyTile.ID;
 
                 
@@ -111,20 +100,24 @@ public class MoveGenerator {
         return moves;
     }
 
-    private List<Move> generatePawnMovementMoves(int startingIndex) {
+    private List<Move> generatePawnMovementMoves(int startingIndex, Position currentPosition) {
         List<Move> moves = new ArrayList<>();
 
-        boolean isWhitePawn = board.getPieceAtIndex(startingIndex).isWhite();
+        if(startingIndex < 8 || startingIndex > 55) {
+            return moves;
+        }
+
+        boolean isWhitePawn = currentPosition.getPieceAtIndex(startingIndex).isWhite();
 
         int row = (startingIndex - (startingIndex % 8)) / 8;
         boolean onStartSquare = (isWhitePawn && row == 6) || (!isWhitePawn && row == 1);
 
         int directionIndex = isWhitePawn ? directionOffsets[0] : directionOffsets[1];
 
-        if (board.getPieceAtIndex(startingIndex + directionIndex).isType(Piece.empty)) {
+        if (currentPosition.getPieceAtIndex(startingIndex + directionIndex).isType(Piece.empty)) {
             moves.add(new Move(startingIndex, startingIndex + directionIndex));
 
-          if (onStartSquare && board.getPieceAtIndex(startingIndex + 2*directionIndex).isType(Piece.empty)) {
+          if (onStartSquare && currentPosition.getPieceAtIndex(startingIndex + 2*directionIndex).isType(Piece.empty)) {
             moves.add(new Move(startingIndex, startingIndex + 2*directionIndex));
           }
 
@@ -133,23 +126,23 @@ public class MoveGenerator {
         return moves;
     }
 
-    private List<Move> generatePawnAttackMoves(int startingIndex) {
+    private List<Move> generatePawnAttackMoves(int startingIndex, Position currentPosition) {
         List<Move> moves = new ArrayList<>();
             if(startingIndex <= 7 || startingIndex >= 56) {
                 return moves;
             }
-        boolean isWhitePawn = board.isWhiteToMove();
+        boolean isWhitePawn = currentPosition.isWhiteToMove();
 
         int directionIndex = isWhitePawn ? directionOffsets[0] : directionOffsets[1];
 
-        Piece attackedPiece = board.getPieceAtIndex(startingIndex + directionIndex - 1);
+        Piece attackedPiece = currentPosition.getPieceAtIndex(startingIndex + directionIndex - 1);
         
         if(attackedPiece.ID != 0 && attackedPiece.isWhite() != isWhitePawn) {
             moves.add(new Move(startingIndex, startingIndex + directionIndex - 1));
         }
 
 
-        attackedPiece = board.getPieceAtIndex(startingIndex + directionIndex + 1);
+        attackedPiece = currentPosition.getPieceAtIndex(startingIndex + directionIndex + 1);
         
         if(attackedPiece.ID != 0 && attackedPiece.isWhite() != isWhitePawn) {
             moves.add(new Move(startingIndex, startingIndex + directionIndex + 1));
@@ -158,17 +151,17 @@ public class MoveGenerator {
         return moves;
     }
 
-    private List<Move> generateEnPessant() {
+    private List<Move> generateEnPessant(Position currentPosition) {
         List<Move> moves = new ArrayList<>();
 
-        if (board.getNumMoves() == 0) {
+        if (currentPosition.getLastMove() == null) {
             return moves;
         }
 
-        Move lastMove = board.getLastMove();
+        Move lastMove = currentPosition.getLastMove();
 
 
-        boolean whiteToMove = board.isWhiteToMove();
+        boolean whiteToMove = currentPosition.isWhiteToMove();
 
         int startIndex = lastMove.startSquare;
         int endIndex = lastMove.targetSquare;
@@ -181,25 +174,23 @@ public class MoveGenerator {
             return moves;
         }
 
-        boolean isCorrectPawn = board.getPieceAtIndex(endIndex + directionOffsets[2]).isWhite() == whiteToMove && board.getPieceAtIndex(endIndex + directionOffsets[2]).isType(Piece.pawn);
+        boolean isCorrectPawn = currentPosition.getPieceAtIndex(endIndex + directionOffsets[2]).isWhite() == whiteToMove && currentPosition.getPieceAtIndex(endIndex + directionOffsets[2]).isType(Piece.pawn);
         if(isCorrectPawn) {
             moves.add(new Move(endIndex + directionOffsets[2], endIndex - offset, true, false, false));
-            System.out.println("en pessant available");
         }
 
-            isCorrectPawn = board.getPieceAtIndex(endIndex + directionOffsets[3]).isWhite() == whiteToMove && board.getPieceAtIndex(endIndex + directionOffsets[3]).isType(Piece.pawn);        
-
+            isCorrectPawn = currentPosition.getPieceAtIndex(endIndex + directionOffsets[3]).isWhite() == whiteToMove && currentPosition.getPieceAtIndex(endIndex + directionOffsets[3]).isType(Piece.pawn);        
+ 
         if(isCorrectPawn) {
             moves.add(new Move(endIndex + directionOffsets[3], endIndex - offset, true, false, false));
-            System.out.println("en pessant available");
         }
         return moves;
     } 
 
-    private List<Move> generateKingMoves(int startingIndex) {
+    private List<Move> generateKingMoves(int startingIndex, Position currentPosition) {
         List<Move> moves = new ArrayList<>();
 
-        boolean isWhiteKing = board.getPieceAtIndex(startingIndex).isWhite();
+        boolean isWhiteKing = currentPosition.getPieceAtIndex(startingIndex).isWhite();
 
         for(int i = 0; i < 8; i++) {
             int attackedIndex = startingIndex + directionOffsets[i];
@@ -210,7 +201,7 @@ public class MoveGenerator {
                 continue;
             }
 
-            Piece attackedPiece = board.getPieceAtIndex(attackedIndex);
+            Piece attackedPiece = currentPosition.getPieceAtIndex(attackedIndex);
 
             if (attackedPiece.ID != 0 && attackedPiece.isWhite() == isWhiteKing) continue;
 
@@ -221,10 +212,10 @@ public class MoveGenerator {
         return moves;
     }
 
-    private List<Move> generateKnightMoves(int startingIndex) {
+    private List<Move> generateKnightMoves(int startingIndex, Position currentPosition) {
         List<Move> moves = new ArrayList<>();
 
-        Piece attackingPiece = board.getPieceAtIndex(startingIndex);
+        Piece attackingPiece = currentPosition.getPieceAtIndex(startingIndex);
         boolean isWhiteKnight = attackingPiece.isWhite();
 
         for(int i = 0; i < 8; i++) {
@@ -236,7 +227,7 @@ public class MoveGenerator {
                 continue;
             }
 
-            Piece attackedPiece = board.getPieceAtIndex(attackedIndex);
+            Piece attackedPiece = currentPosition.getPieceAtIndex(attackedIndex);
 
           
             if(attackedPiece.ID != 0 && attackedPiece.isWhite() == isWhiteKnight) {
@@ -250,15 +241,15 @@ public class MoveGenerator {
         return moves;
     }
 
-    private List<Move> generateCastlingMoves() {
+    private List<Move> generateCastlingMoves(Position currentPosition) {
 
         List<Move> moves = new ArrayList<>();
-        boolean whiteToMove = board.isWhiteToMove();
+        boolean whiteToMove = currentPosition.isWhiteToMove();
 
         //checks if the king and rook involved have moved at anytime during the game
-        boolean canCastleKingside = whiteToMove ? board.canCastle(3) : board.canCastle(1);
+        boolean canCastleKingside = whiteToMove ? currentPosition.canCastle(3) : currentPosition.canCastle(1);
 
-        boolean canCastleQueenSide = whiteToMove ? board.canCastle(2) : board.canCastle(0);
+        boolean canCastleQueenSide = whiteToMove ? currentPosition.canCastle(2) : currentPosition.canCastle(0);
         
 
         if(!(canCastleKingside || canCastleQueenSide)) {
@@ -270,14 +261,14 @@ public class MoveGenerator {
 
         //check if the king is castling while in check or through check
         //checks if it castles into check later
-        canCastleKingside = canCastleKingside && !enemyCanSeeSquare(8*row + 4) && !enemyCanSeeSquare(8*row + 5);
+        canCastleKingside = canCastleKingside && !enemyCanSeeSquare(8*row + 4, currentPosition) && !enemyCanSeeSquare(8*row + 5, currentPosition);
 
 
-        canCastleQueenSide = canCastleKingside && !enemyCanSeeSquare(8*row + 4) && !enemyCanSeeSquare(8*row + 3);
+        canCastleQueenSide = canCastleQueenSide && !enemyCanSeeSquare(8*row + 4, currentPosition) && !enemyCanSeeSquare(8*row + 3, currentPosition);
 
         //checks if there is pieces in the path of the rook and king
-        canCastleKingside = canCastleKingside && (board.getPieceAtIndex(8*row + 5).isType(Piece.empty)) && (board.getPieceAtIndex(8*row + 6).isType(Piece.empty));
-        canCastleQueenSide = canCastleQueenSide && (board.getPieceAtIndex(8*row + 1).isType(Piece.empty)) && (board.getPieceAtIndex(8*row + 2).isType(Piece.empty)) && (board.getPieceAtIndex(8*row + 3).isType(Piece.empty));
+        canCastleKingside = canCastleKingside && (currentPosition.getPieceAtIndex(8*row + 5).isType(Piece.empty)) && (currentPosition.getPieceAtIndex(8*row + 6).isType(Piece.empty));
+        canCastleQueenSide = canCastleQueenSide && (currentPosition.getPieceAtIndex(8*row + 1).isType(Piece.empty)) && (currentPosition.getPieceAtIndex(8*row + 2).isType(Piece.empty)) && (currentPosition.getPieceAtIndex(8*row + 3).isType(Piece.empty));
 
 
         if(canCastleKingside) {
@@ -292,76 +283,83 @@ public class MoveGenerator {
 
     }
 
-    private boolean enemyCanSeeSquare(int index) {
+    private boolean enemyCanSeeSquare(int index, Position position) {
         boolean canSeeSquare = false;
 
         //switch board color to check if enemy pieces can see king
-        board.switchTurns();
+        Position positionCopy = new Position(position);
+        
+        positionCopy.switchTurns();
 
-        List<Move> moves = generateMoves(false);
+        List<Move> moves = generateMoves(false, positionCopy);
 
         for(int i = 0; i < moves.size() && !canSeeSquare; i++) {
             canSeeSquare = moves.get(i).targetSquare == index;
-        }
-
-
-        //switch board color back
-        board.switchTurns();
+        }      
 
         return canSeeSquare;
     }
 
-    private boolean inCheck(Move desiredMove) {
+    private boolean inCheck(Move desiredMove, Position currentPosition) {
 
         boolean inCheck = false;
         int startingIndex = desiredMove.startSquare;  
         int targetIndex = desiredMove.targetSquare;
         int kingIndex = 0;
 
-        Piece capturedPiece = board.getPieceAtIndex(targetIndex);
+        Position positionCopy = new Position(currentPosition);
  
         //hypothetical move
-        board.edit(targetIndex, board.getPieceAtIndex(startingIndex));
-        board.edit(startingIndex, Piece.emptyTile);
+        positionCopy.playMove(new Move(startingIndex, targetIndex));
+
+        positionCopy.switchTurns();
 
 
         for(int i = 0; i < 64; i++) {
-            if(board.getPieceAtIndex(i).isType(Piece.king) && board.getPieceAtIndex(i).isWhite() == board.isWhiteToMove()){
+            if(positionCopy.getPieceAtIndex(i).isType(Piece.king) && positionCopy.getPieceAtIndex(i).isWhite() == positionCopy.isWhiteToMove()){
                 kingIndex = i;
                 break;
             }
         }
+        
 
-        inCheck = enemyCanSeeSquare(kingIndex);
+        inCheck = enemyCanSeeSquare(kingIndex, positionCopy);
 
         //undo hypothetical move
-        board.edit(startingIndex, board.getPieceAtIndex(targetIndex));
-        board.edit(targetIndex, capturedPiece);
+        // board.edit(startingIndex, board.getPieceAtIndex(targetIndex));
+        // board.edit(targetIndex, capturedPiece);
 
 
         return inCheck;
     }
 
-    public boolean inCheck() {
+    public boolean inCheck(Position currentPosition) {
         boolean inCheck = false;
-        int kingIndex = 0;
+        int kingIndex = 100;
 
         for(int i = 0; i < 64; i++) {
-            if(board.getPieceAtIndex(i).isType(Piece.king) && board.getPieceAtIndex(i).isWhite() == board.isWhiteToMove()){
+            if(currentPosition.getPieceAtIndex(i).isType(Piece.king) && currentPosition.getPieceAtIndex(i).isWhite() == currentPosition.isWhiteToMove()){
+                System.out.println("King found");
                 kingIndex = i;
                 break;
             }
         }
 
-        inCheck = enemyCanSeeSquare(kingIndex);
+        if(kingIndex != 100) {
+            inCheck = enemyCanSeeSquare(kingIndex, currentPosition);
+            return inCheck;
+        }
 
+        System.out.println("King not found");
         return inCheck;
+    
     }
 
 
-    public List<Move> generateMoves() {
+    public List<Move> generateMoves(Position currentPosition) {
+        
     long startTime = System.nanoTime();
-      var moves =  generateMoves(true);
+      var moves =  generateMoves(true, currentPosition);
     long finishTime = System.nanoTime();
 
     times.add(finishTime - startTime);
@@ -374,35 +372,36 @@ public class MoveGenerator {
     long avg = sum / times.size();
 
     System.out.println("Average time to compute: " + avg + " nanoseconds");
+    System.out.println("Num legal Moves: " + moves.size());
 
     return moves;
     }
 
-    private List<Move> generateMoves(boolean withCheckLogic) {
+    private List<Move> generateMoves(boolean withCheckLogic, Position currentPosition) {
           List<Move> moves = new ArrayList<>();
    
         for (int index = 0; index < 64; index++) {
               
-            Piece piece = board.getPieceAtIndex(index);
+            Piece piece = currentPosition.getPieceAtIndex(index);
               
             if (piece == Piece.emptyTile) {
                 continue;
             }
 
-            if (piece.isWhite() != board.isWhiteToMove()) {
+            if (piece.isWhite() != currentPosition.isWhiteToMove()) {
                 continue;
             }
 
             if(piece.isSlidingPiece()) {
-                moves.addAll(generateSlidingMoves(index, piece));
+                moves.addAll(generateSlidingMoves(index, piece, currentPosition));
             }
 
             if(piece.isType(Piece.pawn)) {
                 List<Move> pawnMoves = new ArrayList<>();
-                pawnMoves.addAll(generatePawnAttackMoves(index));
+                pawnMoves.addAll(generatePawnAttackMoves(index, currentPosition));
 
                 if(withCheckLogic) {
-                    pawnMoves.addAll(generatePawnMovementMoves(index));
+                    pawnMoves.addAll(generatePawnMovementMoves(index, currentPosition));
                 }
                 //promotion check
                 for(int i = 0; i < pawnMoves.size(); i++) {
@@ -418,22 +417,22 @@ public class MoveGenerator {
             }
 
             if(piece.isType(Piece.knight)) {
-                moves.addAll(generateKnightMoves(index));
+                moves.addAll(generateKnightMoves(index, currentPosition));
             }
 
             if(piece.isType(Piece.king)){ 
-                moves.addAll(generateKingMoves(index));
+                moves.addAll(generateKingMoves(index, currentPosition));
             }
         }
         
         if(withCheckLogic) {
 
-            moves.addAll(generateCastlingMoves());
-            moves.addAll(generateEnPessant());
+            moves.addAll(generateCastlingMoves(currentPosition));
+            moves.addAll(generateEnPessant(currentPosition));
 
            for (int i = moves.size() - 1; i >= 0; i--) {
 
-            if(inCheck(moves.get(i))) {
+            if(inCheck(moves.get(i), currentPosition)) {
                 moves.remove(i);
             }
            }
@@ -442,24 +441,8 @@ public class MoveGenerator {
         return moves;
     }
 
- 
-
-    public boolean isLegalMove(int startingIndex, int targetIndex) {
-
-        if (startingIndex == targetIndex) return false;
-            List<Move> legalMoves = generateMoves();
-            Move requestedMove = new Move(startingIndex, targetIndex);
-
-
-
-            boolean isLegalMove = legalMoves.contains(requestedMove);
-            System.out.println("Legal Move: " + isLegalMove);
-
-            return isLegalMove;
-    }
-
-    public Move getLegalMove(int startingIndex, int targetIndex) {
-        List<Move> legalMoves = generateMoves();
+    public Move getLegalMove(int startingIndex, int targetIndex, Position currentPosition) {
+        List<Move> legalMoves = generateMoves(currentPosition);
         Move requestedMove = new Move(startingIndex, targetIndex);
 
         for(int i = 0; i < legalMoves.size(); i++) {

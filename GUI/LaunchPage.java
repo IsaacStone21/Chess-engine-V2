@@ -1,7 +1,6 @@
 package GUI;
 import javax.swing.JFrame;
 
-import Engine.FENUtil;
 
 public class LaunchPage {
     private JFrame frame;
@@ -28,15 +27,16 @@ public class LaunchPage {
     public LaunchPage() {
         frame = new JFrame();
         frame.setSize(8*tileSize + 10, 8*tileSize + 35);
+        frame.setLayout(null);
         
         frame.setTitle("Chess");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         
         window = new GameManager();
-        
-        window.setVisible(true);
+        window.setLayout(null);
 
         frame.add(window);
+        window.setVisible(true);
 
         frame.setVisible(true);
     }

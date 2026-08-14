@@ -1,6 +1,7 @@
 package GUI;
 
 import java.awt.Color;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.List;
 import java.awt.Point;
@@ -8,6 +9,7 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import Engine.Board;
@@ -74,14 +76,12 @@ public class GameManager extends JPanel{
          "Color Selector", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE,
           LaunchPage.blackPawnPNG, options, 0) == 0;
 
-        //   board.setPlayerColor(playerIsWhite);
+        board.setPlayerColor(playerIsWhite);
 
-          if (!playerIsWhite) {
-            board.logMove(moveGenerator.getBoardMove());
+        if (!playerIsWhite) {
+            board.playEngineMove();
             pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
-
-          }
-
+        }
         gameStatus = GameStatus.ONGOING;
 
         updateBoardInterface();
@@ -94,9 +94,9 @@ public class GameManager extends JPanel{
     }
 
     private void updateGameStatus() {
-        if(moveGenerator.getNumLegalMoves() != 0) {
-            gameStatus = GameStatus.ONGOING; 
-        } else if(moveGenerator.inCheck()) {
+        if(moveGenerator.getNumLegalMoves(board.getPosition()) != 0) {
+            gameStatus = GameStatus.ONGOING;
+        } else if (moveGenerator.inCheck(board.getPosition())) {
             gameStatus = GameStatus.CHECKMATE;
         } else {
             gameStatus = GameStatus.STALEMATE;
@@ -104,10 +104,35 @@ public class GameManager extends JPanel{
     }
 
     private void endGame() {
-        if (gameStatus == GameStatus.CHECKMATE) {
-            //display victor
-        } else {
-            //close program
+        String text = gameStatus == GameStatus.CHECKMATE ? "Checkmate" : "Stalemate";
+
+        if (gameStatus != GameStatus.ONGOING) {
+            JPanel endScreen = new JPanel(null);
+
+            int frameWidth = 250;
+            int frameHeight = 125;
+
+            // Center it on the 800x800 chess board
+            int x = (8 * tileSize - frameWidth) / 2;
+            int y = (8 * tileSize - frameHeight) / 2;
+
+            endScreen.setBounds(x, y, frameWidth, frameHeight);
+            endScreen.setBackground(Color.lightGray);
+
+            JLabel checkmateText = new JLabel(text);
+            checkmateText.setFont(new Font("Arial", Font.BOLD, 24));
+
+            // Center the label manually
+            checkmateText.setBounds(35, 40, 180, 40);
+
+            endScreen.add(checkmateText);
+
+            add(endScreen);
+
+            revalidate();
+            repaint();
+
+            return;
         }
     }
 
@@ -186,7 +211,7 @@ public class GameManager extends JPanel{
             int newX;
             int newY;
 
-            Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex);
+            Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex, board.getPosition());
 
 
             if ((image != null && requestedMove != null) ) {
@@ -195,15 +220,33 @@ public class GameManager extends JPanel{
             col = targetIndex - 8*row;
             newX = col*tileSize + offset;
             newY = row*tileSize + offset;
-            
-
-
-            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
 
             //player move
             playMove(requestedMove);
 
-            playMove(moveGenerator.getBoardMove());
+            updateGameStatus();
+
+            if(gameStatus != GameStatus.ONGOING) {
+                endGame();
+                pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+                repaint();
+                return;
+            }
+
+            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+
+            board.playEngineMove();
+
+            updateGameStatus();
+            
+            if(gameStatus != GameStatus.ONGOING) {
+                endGame();
+                pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+                repaint();
+                return;
+            }            
+
+            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
 
             image = null;
 
@@ -221,7 +264,7 @@ public class GameManager extends JPanel{
 
             repaint();
             }
-            System.out.println("Num Moves played: " + board.getNumMoves());
+            System.out.println("Board FEN: " + FENUtil.positionToFEN(board.getPosition()));
         }
     }
 
