@@ -1,4 +1,4 @@
-package Engine;
+package EngineUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -285,17 +285,48 @@ public class MoveGenerator {
 
     private boolean enemyCanSeeSquare(int index, Position position) {
         boolean canSeeSquare = false;
-
-        //switch board color to check if enemy pieces can see king
-        Position positionCopy = new Position(position);
         
-        positionCopy.switchTurns();
+        int enemyColor = position.isWhiteToMove() ? Piece.white : Piece.black;
 
-        List<Move> moves = generateMoves(false, positionCopy);
+        var knightCheck = generateKnightMoves(index, position);
+        for(int i = 0; i < knightCheck.size(); i++) {
+           if(position.getPieceAtIndex(knightCheck.get(i).targetSquare).ID == (enemyColor | Piece.knight)) {
+            canSeeSquare = true;
+            return canSeeSquare;
+           }
+        } 
 
-        for(int i = 0; i < moves.size() && !canSeeSquare; i++) {
-            canSeeSquare = moves.get(i).targetSquare == index;
-        }      
+        var bishopCheck = generateSlidingMoves(index, new Piece(enemyColor, Piece.bishop), position);
+        for(int i = 0; i < bishopCheck.size(); i++){
+            if(position.getPieceAtIndex(bishopCheck.get(i).targetSquare).ID == (enemyColor | Piece.bishop) || position.getPieceAtIndex(bishopCheck.get(i).targetSquare).ID == (enemyColor | Piece.queen)) {
+                canSeeSquare = true;
+                return canSeeSquare;
+            }
+        }
+
+        var rookCheck = generateSlidingMoves(index, new Piece(enemyColor, Piece.rook), position);
+        for(int i = 0; i < rookCheck.size(); i++){
+            if(position.getPieceAtIndex(rookCheck.get(i).targetSquare).ID == (enemyColor | Piece.rook) || position.getPieceAtIndex(rookCheck.get(i).targetSquare).ID == (enemyColor | Piece.queen)) {
+                canSeeSquare = true;
+                return canSeeSquare;
+            }
+        }
+
+        var pawnCheck = generatePawnAttackMoves(index, position);
+        for(int i = 0; i < pawnCheck.size(); i++) {
+            if(position.getPieceAtIndex(pawnCheck.get(i).targetSquare).ID == (enemyColor | Piece.pawn)) {
+                canSeeSquare = true;
+                return canSeeSquare;
+            }
+        }
+
+        var kingCheck = generateKingMoves(index, position);
+        for(int i = 0; i < kingCheck.size(); i++) {
+            if(position.getPieceAtIndex(kingCheck.get(i).targetSquare).ID == (enemyColor | Piece.king)) {
+                canSeeSquare = true;
+                return canSeeSquare;
+            }
+        }
 
         return canSeeSquare;
     }
@@ -339,7 +370,7 @@ public class MoveGenerator {
 
         for(int i = 0; i < 64; i++) {
             if(currentPosition.getPieceAtIndex(i).isType(Piece.king) && currentPosition.getPieceAtIndex(i).isWhite() == currentPosition.isWhiteToMove()){
-                System.out.println("King found");
+                //System.out.println("King found");
                 kingIndex = i;
                 break;
             }
@@ -350,7 +381,7 @@ public class MoveGenerator {
             return inCheck;
         }
 
-        System.out.println("King not found");
+        //System.out.println("King not found");
         return inCheck;
     
     }
@@ -371,8 +402,8 @@ public class MoveGenerator {
 
     long avg = sum / times.size();
 
-    System.out.println("Average time to compute: " + avg + " nanoseconds");
-    System.out.println("Num legal Moves: " + moves.size());
+    //System.out.println("Average time to compute: " + avg + " nanoseconds");
+    //System.out.println("Num legal Moves: " + moves.size());
 
     return moves;
     }

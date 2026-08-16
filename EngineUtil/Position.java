@@ -1,10 +1,13 @@
-package Engine;
+package EngineUtil;
 
 
 public class Position {
     private boolean whiteToMove;
     private Piece[] pieces = new Piece[64];
     private Move lastMove;
+    private Position lastPosition;
+
+    
 
 
     // sets values inside to false if a king or rook moves
@@ -14,6 +17,7 @@ public class Position {
     public Position() {
         pieces = FENUtil.FENtoPosition(FENUtil.startFEN);
         whiteToMove = true;
+
 
         for(int i = 0; i < 4; i++) {
             castlingCheck[i] = true; 
@@ -27,6 +31,7 @@ public class Position {
         this.lastMove = newPosition.lastMove;
         this.castlingCheck = newPosition.castlingCheck.clone();
         this.pieces = newPosition.pieces.clone();
+        this.lastPosition = newPosition.lastPosition;
     }
 
 
@@ -37,14 +42,6 @@ public class Position {
     public void switchTurns() {
         whiteToMove = !whiteToMove;
     }
-
-    // public int getNumMoves() {
-    //     return numMoves;
-    // }
-
-//    public void updateBoard(String FEN) {
-//     pieces = FENUtil.FENtoPosition(FEN);
-//    }
 
    public Piece getPieceAtIndex(int index) {
     return pieces[index];
@@ -60,6 +57,7 @@ public class Position {
 
    public void playMove(Move acceptedMove) {
     lastMove = acceptedMove;
+    lastPosition = new Position(this);
     int startIndex = acceptedMove.startSquare;
     int targetIndex = acceptedMove.targetSquare;
 
@@ -91,6 +89,16 @@ public class Position {
     updateCastlingCheck(acceptedMove);
     switchTurns();
    }
+
+    public void undoMove() {
+        Position previous = lastPosition;
+
+        this.castlingCheck = previous.castlingCheck.clone();
+        this.lastMove = previous.lastMove;
+        this.pieces = previous.pieces.clone();
+        this.whiteToMove = previous.whiteToMove;
+        this.lastPosition = previous.lastPosition;
+    }
 
    public Move getLastMove() {
     return lastMove;
