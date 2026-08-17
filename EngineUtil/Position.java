@@ -3,20 +3,54 @@ package EngineUtil;
 
 public class Position {
     private boolean whiteToMove;
-    private Piece[] pieces = new Piece[64];
     private Move lastMove;
     private Position lastPosition;
 
-    
+     long whitePawns;
+    long whiteKnights;
+    long whiteBishops;
+    long whiteRooks;
+    long whiteQueens;
+    long whiteKing;
 
+    long blackPawns;
+    long blackKnights;
+    long blackBishops;
+    long blackRooks;
+    long blackQueens;
+    long blackKing;
+
+    long whitePieces;
+    long blackPieces;
+    long occupied;
 
     // sets values inside to false if a king or rook moves
     private boolean[] castlingCheck = new boolean[4];
 
 
     public Position() {
-        pieces = FENUtil.FENtoPosition(FENUtil.startFEN);
         whiteToMove = true;
+
+
+        whitePawns = 0x00FF000000000000L;
+        whiteKnights = 0x4200000000000000L;
+        whiteBishops = 0x2400000000000000L;
+        whiteRooks = 0x8100000000000000L;
+        whiteQueens = 0x0800000000000000L;
+        whiteKing = 0x1000000000000000L;
+
+        whitePieces = whitePawns | whiteKnights | whiteBishops |  whiteRooks | whiteQueens | whiteKing;
+
+        blackPawns = 0x000000000000FF00L;
+        blackKnights = 0x0000000000000042L;
+        blackBishops = 0x0000000000000024L;
+        blackRooks = 0x0000000000000081L;
+        blackQueens = 0x0000000000000008L;
+        blackKing = 0x0000000000000010L;
+
+        blackPieces = blackPawns | blackKnights | blackBishops | blackRooks | blackQueens | blackKing;
+
+        occupied = whitePieces | blackPieces;
 
 
         for(int i = 0; i < 4; i++) {
@@ -27,11 +61,22 @@ public class Position {
     }
 
     public Position(Position newPosition) {
+        this.whitePawns = newPosition.whitePawns;
+        this.whiteBishops = newPosition.whiteBishops;
+        this.whiteKnights = newPosition.whiteKnights;
+        this.whiteRooks = newPosition.whiteRooks;
+        this.whiteQueens = newPosition.whiteQueens;
+        this.whiteKing = newPosition.whiteKing;
+
+        this.blackPawns = newPosition.blackPawns;
+        this.blackBishops = newPosition.blackBishops;
+        this.blackKnights = newPosition.blackKnights;
+        this.blackRooks = newPosition.blackRooks;
+        this.blackQueens = newPosition.blackQueens;
+        this.blackKing = newPosition.blackKing;
+
         this.whiteToMove = newPosition.whiteToMove;
-        this.lastMove = newPosition.lastMove;
         this.castlingCheck = newPosition.castlingCheck.clone();
-        this.pieces = newPosition.pieces.clone();
-        this.lastPosition = newPosition.lastPosition;
     }
 
 
@@ -43,62 +88,66 @@ public class Position {
         whiteToMove = !whiteToMove;
     }
 
-   public Piece getPieceAtIndex(int index) {
-    return pieces[index];
+
+   public static long bit(int index) {
+    return 1L << index;
    }
 
-   public void edit(int index, Piece piece) {
-    pieces[index] = piece;
+   public long getWhitePieces() {
+    whitePieces = whitePawns | whiteKnights | whiteBishops |  whiteRooks | whiteQueens | whiteKing;
+    return whitePieces;
    }
 
-   public Piece[] getPosition() {
-    return pieces;
+   public long getBlackPieces() {
+    blackPieces = blackPawns | blackKnights | blackBishops |  blackRooks | blackQueens | blackKing;
+    return whitePieces;
    }
 
-   public void playMove(Move acceptedMove) {
-    lastMove = acceptedMove;
-    lastPosition = new Position(this);
-    int startIndex = acceptedMove.startSquare;
-    int targetIndex = acceptedMove.targetSquare;
 
-    if(acceptedMove.isEnPessant) {
-        int offset = startIndex > targetIndex ? 8 : -8;
+//    public void playMove(Move acceptedMove) {
+//     lastMove = acceptedMove;
+//     lastPosition = new Position(this);
+//     int startIndex = acceptedMove.startSquare;
+//     int targetIndex = acceptedMove.targetSquare;
 
-        edit(targetIndex + offset, Piece.emptyTile);
-    }
+//     if(acceptedMove.isEnPessant) {
+//         int offset = startIndex > targetIndex ? 8 : -8;
 
-    edit(targetIndex, getPieceAtIndex(startIndex));
-    edit(startIndex, Piece.emptyTile);
+//         edit(targetIndex + offset, Piece.emptyTile);
+//     }
 
-    if(acceptedMove.isCastling) {
-        boolean isWhite = startIndex == 60;
-        Piece rook = isWhite ? new Piece(Piece.white, Piece.rook) : new Piece(Piece.black, Piece.rook);
+//     edit(targetIndex, getPieceAtIndex(startIndex));
+//     edit(startIndex, Piece.emptyTile);
 
-        edit((startIndex + targetIndex) / 2, rook);
+//     if(acceptedMove.isCastling) {
+//         boolean isWhite = startIndex == 60;
+//         Piece rook = isWhite ? new Piece(Piece.white, Piece.rook) : new Piece(Piece.black, Piece.rook);
 
-        boolean kingside = targetIndex == 6 || targetIndex == 62;
-        int rookIndex = isWhite ? (kingside ? 63 : 56) : (kingside ? 7 : 0);
+//         edit((startIndex + targetIndex) / 2, rook);
 
-        edit(rookIndex, Piece.emptyTile);
-    }
+//         boolean kingside = targetIndex == 6 || targetIndex == 62;
+//         int rookIndex = isWhite ? (kingside ? 63 : 56) : (kingside ? 7 : 0);
 
-    if(acceptedMove.isPromotion) {
-        edit(acceptedMove.targetSquare, new Piece(acceptedMove.targetSquare <= 7 ? Piece.white : Piece.black, Piece.queen));
-    }
+//         edit(rookIndex, Piece.emptyTile);
+//     }
 
-    updateCastlingCheck(acceptedMove);
-    switchTurns();
-   }
+//     if(acceptedMove.isPromotion) {
+//         edit(acceptedMove.targetSquare, new Piece(acceptedMove.targetSquare <= 7 ? Piece.white : Piece.black, Piece.queen));
+//     }
 
-    public void undoMove() {
-        Position previous = lastPosition;
+//     updateCastlingCheck(acceptedMove);
+//     switchTurns();
+//    }
 
-        this.castlingCheck = previous.castlingCheck.clone();
-        this.lastMove = previous.lastMove;
-        this.pieces = previous.pieces.clone();
-        this.whiteToMove = previous.whiteToMove;
-        this.lastPosition = previous.lastPosition;
-    }
+//     public void undoMove() {
+//         Position previous = lastPosition;
+
+//         this.castlingCheck = previous.castlingCheck.clone();
+//         this.lastMove = previous.lastMove;
+//         this.pieces = previous.pieces.clone();
+//         this.whiteToMove = previous.whiteToMove;
+//         this.lastPosition = previous.lastPosition;
+//     }
 
    public Move getLastMove() {
     return lastMove;
