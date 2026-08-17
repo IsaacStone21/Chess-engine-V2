@@ -10,6 +10,7 @@ public class MoveGenerator {
 
     // UUR, URR, DRR, DDR, DDL, DLL, ULL, UUL
     int[] knightOffsets = {-15, -6, 10, 17, 15, 6, -10, -17};
+    long[] knightAttackTable = new long[64];
 
     //contains the number of squares to the edge in each direction
     //first number is the index
@@ -27,6 +28,7 @@ public class MoveGenerator {
 
     public MoveGenerator() {
         generateSquaresToEdge();
+        generateKnightTable();
     }
 
     private void generateSquaresToEdge() {
@@ -50,6 +52,21 @@ public class MoveGenerator {
         }
     }
 
+    private void generateKnightTable() {
+        for(int i = 0; i < 64; i++) {
+            long attackableSquares = 0x0000000000000000L;
+
+            for(int j = 0; j < 8; j++) {
+                int targetIndex = i + knightOffsets[j];
+                if(targetIndex < 64 && targetIndex >= 0 && !wrapsBoard(i, targetIndex)) {
+                    attackableSquares |= Position.bit(targetIndex);
+                }
+            }
+
+            knightAttackTable[i] = attackableSquares;
+        }
+    }
+
     //checks if the move doesnt wrap around the board
     private boolean wrapsBoard(int startingIndex, int targetIndex) {
 
@@ -64,7 +81,6 @@ public class MoveGenerator {
     }
 
     private List<Move> generateKnightMoves(Position position) {
-        //optimize later with precomputed knight moves
         List<Move> moves = new ArrayList<>();
         long knights = position.isWhiteToMove() ? position.whiteKnights : position.blackKnights;
         long friendlyPieces = position.isWhiteToMove() ? position.getWhitePieces() : position.getBlackPieces();
@@ -72,25 +88,134 @@ public class MoveGenerator {
         while(knights != 0) {
             int knightIndex = Long.numberOfTrailingZeros(knights);
 
-            for(int i = 0; i < 8; i++) {
-                int targetIndex = knightIndex + knightOffsets[i];
+            long attackableSquares = knightAttackTable[knightIndex] & ~friendlyPieces;
 
-                if(targetIndex >= 64 || targetIndex < 0 || wrapsBoard(knightIndex, targetIndex)) {
-                    continue;
-                }
-
-                if ((friendlyPieces & Position.bit(targetIndex)) != 0) {
-                    continue;
-                }
-
-                moves.add(new Move(knightIndex, targetIndex ));
+            while(attackableSquares != 0) {
+                moves.add(new Move(knightIndex, Long.numberOfTrailingZeros(attackableSquares)));
+                attackableSquares &= attackableSquares - 1;
             }
 
-            knights &= ~Position.bit(knightIndex);
+            knights &= knights - 1;
         }
 
-
         return moves;
+    }
+
+    private List<Move> generatePawnMoves(Position position) {
+        List<Move> moves = new ArrayList<>();
+        boolean whiteToPlay = position.isWhiteToMove();
+        long occupiedSquares = position.getOccupiedSquares();
+
+        if(whiteToPlay) {
+            long pawns = position.whitePawns;
+            long enemyPieces =position.getBlackPieces();
+
+
+            long singlePush = (pawns >>> 8) & ~occupiedSquares;
+            //the hexadecimal ensure that the pawns are moving to the correct rank
+            long doublePush = (singlePush >>> 8) & ~occupiedSquares & 0x00000000FF000000L;
+
+            //the hexadecimal ensure the H file isn't being attacked because that would be immpossible to be attacking left and attacking the H file
+            long leftAttack = ((pawns & ~0x0101010101010101L) >>> 9) & enemyPieces;
+
+            //same concept as left attack but with the A file
+            long rightAttack = ((pawns & ~0x8080808080808080L) >>> 7) & enemyPieces;
+
+            while(singlePush != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(singlePush);
+                int startSquare = targetSquare + 8;
+                if(targetSquare < 8) {
+                    moves.add(new Move(startSquare, targetSquare, false, false, true));
+                } else {
+                    moves.add(new Move(startSquare, targetSquare));
+                }
+                singlePush &= singlePush - 1;
+            }
+
+            while(doublePush != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(doublePush);
+                int startSquare = targetSquare + 16;
+                moves.add(new Move(startSquare, targetSquare));
+                doublePush &= doublePush - 1;
+            }
+
+            while(leftAttack != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(leftAttack);
+                int startSquare = targetSquare + 9;
+                if(targetSquare < 8) {
+                    moves.add(new Move(startSquare, targetSquare, false, false, true));
+                } else {
+                    moves.add(new Move(startSquare, targetSquare));
+                }
+                leftAttack &= leftAttack - 1;
+            }
+
+            while(rightAttack != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(rightAttack);
+                int startSquare = targetSquare + 7;
+                if(targetSquare < 8) {
+                    moves.add(new Move(startSquare, targetSquare, false, false, true));
+                } else {
+                    moves.add(new Move(startSquare, targetSquare));
+                }
+                rightAttack &= rightAttack - 1;
+            }
+        } else {
+            long pawns = position.blackPawns;
+            long enemyPieces =position.getWhitePieces();
+
+            long singlePush = (pawns << 8) & ~occupiedSquares;
+            //the hexadecimal ensure that the pawns are moving to the correct rank
+            long doublePush = (singlePush << 8) & ~occupiedSquares & 0x000000FF00000000L;
+
+            //the hexadecimal ensure the H file isn't being attacked because that would be immpossible to be attacking left and attacking the H file
+            long leftAttack = ((pawns & ~0x0101010101010101L) << 9) & enemyPieces;
+
+            //same concept as left attack but with the A file
+            long rightAttack = ((pawns & ~0x8080808080808080L) << 7) & enemyPieces;
+
+            while(singlePush != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(singlePush);
+                int startSquare = targetSquare - 8;
+                if(targetSquare >= 56) {
+                    moves.add(new Move(startSquare, targetSquare, false, false, true));
+                } else {
+                    moves.add(new Move(startSquare, targetSquare));
+                }
+                singlePush &= singlePush - 1;
+            }
+
+            while(doublePush != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(doublePush);
+                int startSquare = targetSquare - 16;
+                moves.add(new Move(startSquare, targetSquare));
+                doublePush &= doublePush - 1;
+            }
+
+            while(leftAttack != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(leftAttack);
+                int startSquare = targetSquare - 9;
+                if(targetSquare >= 56) {
+                    moves.add(new Move(startSquare, targetSquare, false, false, true));
+                } else {
+                    moves.add(new Move(startSquare, targetSquare));
+                }
+                leftAttack &= leftAttack - 1;
+            }
+
+            while(rightAttack != 0) {
+                int targetSquare = Long.numberOfTrailingZeros(rightAttack);
+                int startSquare = targetSquare - 7;
+                if(targetSquare >= 56) {
+                    moves.add(new Move(startSquare, targetSquare, false, false, true));
+                } else {
+                    moves.add(new Move(startSquare, targetSquare));
+                }
+                rightAttack &= rightAttack - 1;           
+        }
+      }
+
+      return moves;
     }
 
 
