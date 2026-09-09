@@ -100,7 +100,12 @@ public class Position {
 
    public long getBlackPieces() {
     blackPieces = blackPawns | blackKnights | blackBishops |  blackRooks | blackQueens | blackKing;
-    return whitePieces;
+    return blackPieces;
+   }
+
+   public long getOccupiedSquares() {
+    occupied = getWhitePieces() | getBlackPieces();
+    return occupied;
    }
 
 

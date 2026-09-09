@@ -17,6 +17,13 @@ public class MoveGenerator {
     //second is the direction: Up, down, left, right, UL, UR, DL, DR
     int[][] numSquaresToEdge = new int[64][8];
 
+    //ray of squares (to the edge of the board, ignoring occupancy) from a square in a given direction
+    //indexed [direction][square], direction order matches directionOffsets: Up, Down, Left, Right, UL, UR, DL, DR
+    long[][] rayAttacks = new long[8][64];
+
+    //true if moving in this direction increases the square index (Down, Right, DL, DR)
+    boolean[] directionIncreasesIndex = {false, true, false, true, false, false, true, true};
+
 
     private final Move whiteKingsideCastle = new Move(60, 62, false, true, false);
     private final Move whiteQueensideCastle = new Move(60, 58, false, true, false);
@@ -29,6 +36,7 @@ public class MoveGenerator {
     public MoveGenerator() {
         generateSquaresToEdge();
         generateKnightTable();
+        generateRayAttacks();
     }
 
     private void generateSquaresToEdge() {
@@ -80,6 +88,78 @@ public class MoveGenerator {
         return Math.abs(attackedCol - startCol) > 2;
     }
 
+    private void generateRayAttacks() {
+        for (int square = 0; square < 64; square++) {
+            for (int dir = 0; dir < 8; dir++) {
+                long ray = 0L;
+                int current = square;
+
+                for (int step = 0; step < numSquaresToEdge[square][dir]; step++) {
+                    current += directionOffsets[dir];
+                    ray |= Position.bit(current);
+                }
+
+                rayAttacks[dir][square] = ray;
+            }
+        }
+    }
+
+    //returns the squares a slider on `square` can reach in a single direction, stopping at (and including) the first blocker
+    private long getRayAttacks(int square, int direction, long occupied) {
+        long attacks = rayAttacks[direction][square];
+        long blockers = attacks & occupied;
+
+        if (blockers == 0) {
+            return attacks;
+        }
+
+        int blockerSquare = directionIncreasesIndex[direction]
+                ? Long.numberOfTrailingZeros(blockers)
+                : 63 - Long.numberOfLeadingZeros(blockers);
+
+        //rayAttacks[direction][blockerSquare] is everything strictly beyond the blocker; cut that off
+        return attacks & ~rayAttacks[direction][blockerSquare];
+    }
+
+    private long getSlidingAttacks(int square, long occupied, boolean orthogonal, boolean diagonal) {
+        long attacks = 0L;
+
+        if (orthogonal) {
+            for (int dir = 0; dir <= 3; dir++) {
+                attacks |= getRayAttacks(square, dir, occupied);
+            }
+        }
+
+        if (diagonal) {
+            for (int dir = 4; dir <= 7; dir++) {
+                attacks |= getRayAttacks(square, dir, occupied);
+            }
+        }
+
+        return attacks;
+    }
+
+    private List<Move> generateSlidingMoves(Position position, long pieces, boolean orthogonal, boolean diagonal) {
+        List<Move> moves = new ArrayList<>();
+        long friendlyPieces = position.isWhiteToMove() ? position.getWhitePieces() : position.getBlackPieces();
+        long occupied = position.getOccupiedSquares();
+
+        while (pieces != 0) {
+            int startSquare = Long.numberOfTrailingZeros(pieces);
+
+            long attackableSquares = getSlidingAttacks(startSquare, occupied, orthogonal, diagonal) & ~friendlyPieces;
+
+            while (attackableSquares != 0) {
+                moves.add(new Move(startSquare, Long.numberOfTrailingZeros(attackableSquares)));
+                attackableSquares &= attackableSquares - 1;
+            }
+
+            pieces &= pieces - 1;
+        }
+
+        return moves;
+    }
+
     private List<Move> generateKnightMoves(Position position) {
         List<Move> moves = new ArrayList<>();
         long knights = position.isWhiteToMove() ? position.whiteKnights : position.blackKnights;
@@ -113,7 +193,7 @@ public class MoveGenerator {
 
             long singlePush = (pawns >>> 8) & ~occupiedSquares;
             //the hexadecimal ensure that the pawns are moving to the correct rank
-            long doublePush = (singlePush >>> 8) & ~occupiedSquares & 0x00000000FF000000L;
+            long doublePush = (singlePush >>> 8) & ~occupiedSquares & 0x000000FF00000000L;
 
             //the hexadecimal ensure the H file isn't being attacked because that would be immpossible to be attacking left and attacking the H file
             long leftAttack = ((pawns & ~0x0101010101010101L) >>> 9) & enemyPieces;
@@ -166,7 +246,7 @@ public class MoveGenerator {
 
             long singlePush = (pawns << 8) & ~occupiedSquares;
             //the hexadecimal ensure that the pawns are moving to the correct rank
-            long doublePush = (singlePush << 8) & ~occupiedSquares & 0x000000FF00000000L;
+            long doublePush = (singlePush << 8) & ~occupiedSquares & 0x00000000FF000000L;
 
             //the hexadecimal ensure the H file isn't being attacked because that would be immpossible to be attacking left and attacking the H file
             long leftAttack = ((pawns & ~0x0101010101010101L) << 9) & enemyPieces;
@@ -227,6 +307,14 @@ public class MoveGenerator {
     public List<Move> generateMoves(Position currentPosition) {
     List<Move> moves = new ArrayList<>();
     long startTime = System.nanoTime();
+
+    boolean whiteToMove = currentPosition.isWhiteToMove();
+
+    moves.addAll(generatePawnMoves(currentPosition));
+    moves.addAll(generateKnightMoves(currentPosition));
+    moves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteRooks : currentPosition.blackRooks, true, false));
+    moves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteBishops : currentPosition.blackBishops, false, true));
+    moves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteQueens : currentPosition.blackQueens, true, true));
 
     long finishTime = System.nanoTime();
 
