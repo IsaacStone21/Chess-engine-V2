@@ -54,12 +54,15 @@ public class Position {
 
 
         for(int i = 0; i < 4; i++) {
-            castlingCheck[i] = true; 
+            castlingCheck[i] = true;
         }
 
         lastMove = null;
     }
 
+    // Copies every field needed to fully restore this position later, including the undo chain
+    // itself (lastMove/lastPosition) so playMove/undoMove can be nested arbitrarily deep (e.g. a
+    // search making several moves in a row before unwinding them one at a time).
     public Position(Position newPosition) {
         this.whitePawns = newPosition.whitePawns;
         this.whiteBishops = newPosition.whiteBishops;
@@ -77,6 +80,9 @@ public class Position {
 
         this.whiteToMove = newPosition.whiteToMove;
         this.castlingCheck = newPosition.castlingCheck.clone();
+
+        this.lastMove = newPosition.lastMove;
+        this.lastPosition = newPosition.lastPosition;
     }
 
 
@@ -108,51 +114,139 @@ public class Position {
     return occupied;
    }
 
+   //reconstructs a Piece object for the given square by checking each bitboard in turn
+   public Piece getPieceAtIndex(int index) {
+    long mask = bit(index);
 
-//    public void playMove(Move acceptedMove) {
-//     lastMove = acceptedMove;
-//     lastPosition = new Position(this);
-//     int startIndex = acceptedMove.startSquare;
-//     int targetIndex = acceptedMove.targetSquare;
+    if((whitePawns & mask) != 0) return new Piece(Piece.white, Piece.pawn);
+    if((whiteKnights & mask) != 0) return new Piece(Piece.white, Piece.knight);
+    if((whiteBishops & mask) != 0) return new Piece(Piece.white, Piece.bishop);
+    if((whiteRooks & mask) != 0) return new Piece(Piece.white, Piece.rook);
+    if((whiteQueens & mask) != 0) return new Piece(Piece.white, Piece.queen);
+    if((whiteKing & mask) != 0) return new Piece(Piece.white, Piece.king);
 
-//     if(acceptedMove.isEnPessant) {
-//         int offset = startIndex > targetIndex ? 8 : -8;
+    if((blackPawns & mask) != 0) return new Piece(Piece.black, Piece.pawn);
+    if((blackKnights & mask) != 0) return new Piece(Piece.black, Piece.knight);
+    if((blackBishops & mask) != 0) return new Piece(Piece.black, Piece.bishop);
+    if((blackRooks & mask) != 0) return new Piece(Piece.black, Piece.rook);
+    if((blackQueens & mask) != 0) return new Piece(Piece.black, Piece.queen);
+    if((blackKing & mask) != 0) return new Piece(Piece.black, Piece.king);
 
-//         edit(targetIndex + offset, Piece.emptyTile);
-//     }
+    return Piece.emptyTile;
+   }
 
-//     edit(targetIndex, getPieceAtIndex(startIndex));
-//     edit(startIndex, Piece.emptyTile);
+   //clears every bitboard's bit at this square - safe to call on an empty square
+   private void clearSquare(int index) {
+    long mask = ~bit(index);
 
-//     if(acceptedMove.isCastling) {
-//         boolean isWhite = startIndex == 60;
-//         Piece rook = isWhite ? new Piece(Piece.white, Piece.rook) : new Piece(Piece.black, Piece.rook);
+    whitePawns &= mask;
+    whiteKnights &= mask;
+    whiteBishops &= mask;
+    whiteRooks &= mask;
+    whiteQueens &= mask;
+    whiteKing &= mask;
 
-//         edit((startIndex + targetIndex) / 2, rook);
+    blackPawns &= mask;
+    blackKnights &= mask;
+    blackBishops &= mask;
+    blackRooks &= mask;
+    blackQueens &= mask;
+    blackKing &= mask;
+   }
 
-//         boolean kingside = targetIndex == 6 || targetIndex == 62;
-//         int rookIndex = isWhite ? (kingside ? 63 : 56) : (kingside ? 7 : 0);
+   private void setSquare(int index, boolean white, int type) {
+    long mask = bit(index);
 
-//         edit(rookIndex, Piece.emptyTile);
-//     }
+    if(white) {
+        switch(type) {
+            case Piece.pawn -> whitePawns |= mask;
+            case Piece.knight -> whiteKnights |= mask;
+            case Piece.bishop -> whiteBishops |= mask;
+            case Piece.rook -> whiteRooks |= mask;
+            case Piece.queen -> whiteQueens |= mask;
+            case Piece.king -> whiteKing |= mask;
+        }
+    } else {
+        switch(type) {
+            case Piece.pawn -> blackPawns |= mask;
+            case Piece.knight -> blackKnights |= mask;
+            case Piece.bishop -> blackBishops |= mask;
+            case Piece.rook -> blackRooks |= mask;
+            case Piece.queen -> blackQueens |= mask;
+            case Piece.king -> blackKing |= mask;
+        }
+    }
+   }
 
-//     if(acceptedMove.isPromotion) {
-//         edit(acceptedMove.targetSquare, new Piece(acceptedMove.targetSquare <= 7 ? Piece.white : Piece.black, Piece.queen));
-//     }
+   public void playMove(Move acceptedMove) {
+    //snapshot everything needed to undo, including the older chain link, before mutating this position
+    Position snapshot = new Position(this);
 
-//     updateCastlingCheck(acceptedMove);
-//     switchTurns();
-//    }
+    int startIndex = acceptedMove.startSquare;
+    int targetIndex = acceptedMove.targetSquare;
+    boolean white = whiteToMove;
 
-//     public void undoMove() {
-//         Position previous = lastPosition;
+    Piece movingPiece = getPieceAtIndex(startIndex);
+    int movingType = movingPiece.ID % 8;
 
-//         this.castlingCheck = previous.castlingCheck.clone();
-//         this.lastMove = previous.lastMove;
-//         this.pieces = previous.pieces.clone();
-//         this.whiteToMove = previous.whiteToMove;
-//         this.lastPosition = previous.lastPosition;
-//     }
+    if(acceptedMove.isEnPessant) {
+        //the captured pawn sits one rank behind the target square, not on the target square itself
+        int capturedPawnIndex = startIndex > targetIndex ? targetIndex + 8 : targetIndex - 8;
+        clearSquare(capturedPawnIndex);
+    }
+
+    clearSquare(startIndex);
+    clearSquare(targetIndex);
+    setSquare(targetIndex, white, movingType);
+
+    if(acceptedMove.isCastling) {
+        boolean kingside = targetIndex == 6 || targetIndex == 62;
+        int rookStart = white ? (kingside ? 63 : 56) : (kingside ? 7 : 0);
+        int rookTarget = (startIndex + targetIndex) / 2;
+
+        clearSquare(rookStart);
+        setSquare(rookTarget, white, Piece.rook);
+    }
+
+    if(acceptedMove.isPromotion) {
+        clearSquare(targetIndex);
+        setSquare(targetIndex, white, Piece.queen);
+    }
+
+    updateCastlingCheck(acceptedMove);
+    switchTurns();
+
+    lastMove = acceptedMove;
+    lastPosition = snapshot;
+   }
+
+   public void undoMove() {
+    Position previous = lastPosition;
+
+    if(previous == null) {
+        return;
+    }
+
+    this.whitePawns = previous.whitePawns;
+    this.whiteKnights = previous.whiteKnights;
+    this.whiteBishops = previous.whiteBishops;
+    this.whiteRooks = previous.whiteRooks;
+    this.whiteQueens = previous.whiteQueens;
+    this.whiteKing = previous.whiteKing;
+
+    this.blackPawns = previous.blackPawns;
+    this.blackKnights = previous.blackKnights;
+    this.blackBishops = previous.blackBishops;
+    this.blackRooks = previous.blackRooks;
+    this.blackQueens = previous.blackQueens;
+    this.blackKing = previous.blackKing;
+
+    this.whiteToMove = previous.whiteToMove;
+    this.castlingCheck = previous.castlingCheck.clone();
+
+    this.lastMove = previous.lastMove;
+    this.lastPosition = previous.lastPosition;
+   }
 
    public Move getLastMove() {
     return lastMove;
@@ -181,7 +275,7 @@ public class Position {
     castlingCheck[0] = !(!castlingCheck[0] || blackKingInvolved || blackQueensideRookIndex == startIndex || blackQueensideRookIndex == targetIndex);
     castlingCheck[1] = !(!castlingCheck[1] || blackKingInvolved || blackKingsideRookIndex == startIndex || blackKingsideRookIndex == targetIndex);
     castlingCheck[2] = !(!castlingCheck[2] || whiteKingInvolved || whiteQueensideRookIndex == startIndex || whiteQueensideRookIndex == targetIndex);
-    castlingCheck[3] = !(!castlingCheck[3] || blackKingInvolved || whiteKingsideRookIndex == startIndex || whiteKingsideRookIndex == targetIndex);
+    castlingCheck[3] = !(!castlingCheck[3] || whiteKingInvolved || whiteKingsideRookIndex == startIndex || whiteKingsideRookIndex == targetIndex);
    }
 
    public boolean canCastle(int index) {

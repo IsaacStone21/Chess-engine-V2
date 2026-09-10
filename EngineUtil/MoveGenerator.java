@@ -24,6 +24,13 @@ public class MoveGenerator {
     //true if moving in this direction increases the square index (Down, Right, DL, DR)
     boolean[] directionIncreasesIndex = {false, true, false, true, false, false, true, true};
 
+    long[] kingAttackTable = new long[64];
+
+    //attacks[square] = squares a pawn of that color on `square` attacks; used both to generate pawn
+    //captures elsewhere and, via the symmetry trick in isSquareAttacked, to detect check
+    long[] whitePawnAttackTable = new long[64];
+    long[] blackPawnAttackTable = new long[64];
+
 
     private final Move whiteKingsideCastle = new Move(60, 62, false, true, false);
     private final Move whiteQueensideCastle = new Move(60, 58, false, true, false);
@@ -37,6 +44,8 @@ public class MoveGenerator {
         generateSquaresToEdge();
         generateKnightTable();
         generateRayAttacks();
+        generateKingTable();
+        generatePawnAttackTables();
     }
 
     private void generateSquaresToEdge() {
@@ -86,6 +95,36 @@ public class MoveGenerator {
         int attackedCol = targetIndex - 8 * attackedRow;
 
         return Math.abs(attackedCol - startCol) > 2;
+    }
+
+    private void generateKingTable() {
+        for(int i = 0; i < 64; i++) {
+            long attackableSquares = 0L;
+
+            for(int dir = 0; dir < 8; dir++) {
+                if(numSquaresToEdge[i][dir] > 0) {
+                    attackableSquares |= Position.bit(i + directionOffsets[dir]);
+                }
+            }
+
+            kingAttackTable[i] = attackableSquares;
+        }
+    }
+
+    private void generatePawnAttackTables() {
+        for(int i = 0; i < 64; i++) {
+            long whiteAttacks = 0L;
+            long blackAttacks = 0L;
+
+            //white pawns attack UL/UR (dir 4/5); black pawns attack DL/DR (dir 6/7)
+            if(numSquaresToEdge[i][4] > 0) whiteAttacks |= Position.bit(i + directionOffsets[4]);
+            if(numSquaresToEdge[i][5] > 0) whiteAttacks |= Position.bit(i + directionOffsets[5]);
+            if(numSquaresToEdge[i][6] > 0) blackAttacks |= Position.bit(i + directionOffsets[6]);
+            if(numSquaresToEdge[i][7] > 0) blackAttacks |= Position.bit(i + directionOffsets[7]);
+
+            whitePawnAttackTable[i] = whiteAttacks;
+            blackPawnAttackTable[i] = blackAttacks;
+        }
     }
 
     private void generateRayAttacks() {
@@ -139,6 +178,45 @@ public class MoveGenerator {
         return attacks;
     }
 
+    //true if a piece of `byWhite`'s color attacks `square` in this position. Works by placing each
+    //attacker type on `square` and checking whether its (occupancy-aware, for sliders) attack pattern
+    //hits an actual enemy piece of that type - attacks are symmetric, so this is equivalent to asking
+    //whether any enemy piece attacks `square` directly.
+    public boolean isSquareAttacked(Position position, int square, boolean byWhite) {
+        long occupied = position.getOccupiedSquares();
+
+        long enemyPawns = byWhite ? position.whitePawns : position.blackPawns;
+        long enemyKnights = byWhite ? position.whiteKnights : position.blackKnights;
+        long enemyKing = byWhite ? position.whiteKing : position.blackKing;
+        long enemyQueens = byWhite ? position.whiteQueens : position.blackQueens;
+        long enemyRooks = (byWhite ? position.whiteRooks : position.blackRooks) | enemyQueens;
+        long enemyBishops = (byWhite ? position.whiteBishops : position.blackBishops) | enemyQueens;
+
+        //a pawn of `byWhite`'s color attacks `square` iff `square` shows up in the opposite-colored
+        //pawn attack table centered on `square` itself (the symmetry trick mentioned above)
+        long pawnAttackersFromSquare = byWhite ? blackPawnAttackTable[square] : whitePawnAttackTable[square];
+        if((pawnAttackersFromSquare & enemyPawns) != 0) return true;
+
+        if((knightAttackTable[square] & enemyKnights) != 0) return true;
+        if((kingAttackTable[square] & enemyKing) != 0) return true;
+        if((getSlidingAttacks(square, occupied, true, false) & enemyRooks) != 0) return true;
+        if((getSlidingAttacks(square, occupied, false, true) & enemyBishops) != 0) return true;
+
+        return false;
+    }
+
+    public boolean inCheck(Position position) {
+        boolean white = position.isWhiteToMove();
+        long king = white ? position.whiteKing : position.blackKing;
+
+        if(king == 0) {
+            return false;
+        }
+
+        int kingSquare = Long.numberOfTrailingZeros(king);
+        return isSquareAttacked(position, kingSquare, !white);
+    }
+
     private List<Move> generateSlidingMoves(Position position, long pieces, boolean orthogonal, boolean diagonal) {
         List<Move> moves = new ArrayList<>();
         long friendlyPieces = position.isWhiteToMove() ? position.getWhitePieces() : position.getBlackPieces();
@@ -176,6 +254,74 @@ public class MoveGenerator {
             }
 
             knights &= knights - 1;
+        }
+
+        return moves;
+    }
+
+    private List<Move> generateKingMoves(Position position) {
+        List<Move> moves = new ArrayList<>();
+        boolean white = position.isWhiteToMove();
+        long king = white ? position.whiteKing : position.blackKing;
+        long friendlyPieces = white ? position.getWhitePieces() : position.getBlackPieces();
+
+        if(king == 0) {
+            return moves;
+        }
+
+        int kingIndex = Long.numberOfTrailingZeros(king);
+        long attackableSquares = kingAttackTable[kingIndex] & ~friendlyPieces;
+
+        while(attackableSquares != 0) {
+            int targetSquare = Long.numberOfTrailingZeros(attackableSquares);
+            moves.add(new Move(kingIndex, targetSquare));
+            attackableSquares &= attackableSquares - 1;
+        }
+
+        moves.addAll(generateCastlingMoves(position));
+
+        return moves;
+    }
+
+    //castlingCheck indices: 0 = black queenside, 1 = black kingside, 2 = white queenside, 3 = white kingside
+    private List<Move> generateCastlingMoves(Position position) {
+        List<Move> moves = new ArrayList<>();
+        boolean white = position.isWhiteToMove();
+        long occupied = position.getOccupiedSquares();
+        boolean attackedByWhite = !white;
+
+        if(white) {
+            boolean squaresEmptyKingside = (occupied & (Position.bit(61) | Position.bit(62))) == 0;
+            if(position.canCastle(3) && squaresEmptyKingside
+                    && !isSquareAttacked(position, 60, attackedByWhite)
+                    && !isSquareAttacked(position, 61, attackedByWhite)
+                    && !isSquareAttacked(position, 62, attackedByWhite)) {
+                moves.add(whiteKingsideCastle);
+            }
+
+            boolean squaresEmptyQueenside = (occupied & (Position.bit(57) | Position.bit(58) | Position.bit(59))) == 0;
+            if(position.canCastle(2) && squaresEmptyQueenside
+                    && !isSquareAttacked(position, 60, attackedByWhite)
+                    && !isSquareAttacked(position, 59, attackedByWhite)
+                    && !isSquareAttacked(position, 58, attackedByWhite)) {
+                moves.add(whiteQueensideCastle);
+            }
+        } else {
+            boolean squaresEmptyKingside = (occupied & (Position.bit(5) | Position.bit(6))) == 0;
+            if(position.canCastle(1) && squaresEmptyKingside
+                    && !isSquareAttacked(position, 4, attackedByWhite)
+                    && !isSquareAttacked(position, 5, attackedByWhite)
+                    && !isSquareAttacked(position, 6, attackedByWhite)) {
+                moves.add(blackKingsideCastle);
+            }
+
+            boolean squaresEmptyQueenside = (occupied & (Position.bit(1) | Position.bit(2) | Position.bit(3))) == 0;
+            if(position.canCastle(0) && squaresEmptyQueenside
+                    && !isSquareAttacked(position, 4, attackedByWhite)
+                    && !isSquareAttacked(position, 3, attackedByWhite)
+                    && !isSquareAttacked(position, 2, attackedByWhite)) {
+                moves.add(blackQueensideCastle);
+            }
         }
 
         return moves;
@@ -291,7 +437,7 @@ public class MoveGenerator {
                 } else {
                     moves.add(new Move(startSquare, targetSquare));
                 }
-                rightAttack &= rightAttack - 1;           
+                rightAttack &= rightAttack - 1;
         }
       }
 
@@ -305,16 +451,33 @@ public class MoveGenerator {
 
 
     public List<Move> generateMoves(Position currentPosition) {
-    List<Move> moves = new ArrayList<>();
     long startTime = System.nanoTime();
 
     boolean whiteToMove = currentPosition.isWhiteToMove();
 
-    moves.addAll(generatePawnMoves(currentPosition));
-    moves.addAll(generateKnightMoves(currentPosition));
-    moves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteRooks : currentPosition.blackRooks, true, false));
-    moves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteBishops : currentPosition.blackBishops, false, true));
-    moves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteQueens : currentPosition.blackQueens, true, true));
+    List<Move> pseudoLegalMoves = new ArrayList<>();
+    pseudoLegalMoves.addAll(generatePawnMoves(currentPosition));
+    pseudoLegalMoves.addAll(generateKnightMoves(currentPosition));
+    pseudoLegalMoves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteRooks : currentPosition.blackRooks, true, false));
+    pseudoLegalMoves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteBishops : currentPosition.blackBishops, false, true));
+    pseudoLegalMoves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteQueens : currentPosition.blackQueens, true, true));
+    pseudoLegalMoves.addAll(generateKingMoves(currentPosition));
+
+    //filter out any move that would leave the mover's own king in check (castling legality,
+    //including "can't castle through/out of check", is already enforced in generateCastlingMoves)
+    List<Move> moves = new ArrayList<>();
+    for(Move move : pseudoLegalMoves) {
+        currentPosition.playMove(move);
+
+        long ownKing = whiteToMove ? currentPosition.whiteKing : currentPosition.blackKing;
+        boolean movedIntoCheck = ownKing != 0 && isSquareAttacked(currentPosition, Long.numberOfTrailingZeros(ownKing), !whiteToMove);
+
+        currentPosition.undoMove();
+
+        if(!movedIntoCheck) {
+            moves.add(move);
+        }
+    }
 
     long finishTime = System.nanoTime();
 
@@ -333,7 +496,7 @@ public class MoveGenerator {
     return moves;
     }
 
-    
+
     public Move getLegalMove(int startingIndex, int targetIndex, Position currentPosition) {
         List<Move> legalMoves = generateMoves(currentPosition);
         Move requestedMove = new Move(startingIndex, targetIndex);
