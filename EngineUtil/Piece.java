@@ -1,4 +1,4 @@
-package Engine;
+package EngineUtil;
 
 public class Piece {
     public static final int white = 8;

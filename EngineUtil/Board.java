@@ -1,4 +1,4 @@
-package Engine;
+package EngineUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +59,11 @@ public class Board {
     public void logMove(Move acceptedMove) {
         acceptedMoves.addLast(acceptedMove);
         position.playMove(acceptedMove);
+    }
+
+    public void undoMove() {
+        position.undoMove();
+        acceptedMoves.removeLast();
     }
 
     

@@ -3,7 +3,6 @@ package GUI;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
-import java.awt.List;
 import java.awt.Point;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
@@ -12,10 +11,12 @@ import java.awt.event.MouseEvent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import Engine.Board;
-import Engine.FENUtil;
-import Engine.Move;
-import Engine.MoveGenerator;
+
+import EngineUtil.Board;
+import EngineUtil.Engine;
+import EngineUtil.FENUtil;
+import EngineUtil.Move;
+import EngineUtil.MoveGenerator;
 
 
 public class GameManager extends JPanel{
@@ -68,6 +69,7 @@ public class GameManager extends JPanel{
 
         board = Board.createBoard();
         moveGenerator = new MoveGenerator();
+        Engine.initiateEngine();
 
         String[] options = {"White", "Black"};
 
@@ -264,7 +266,8 @@ public class GameManager extends JPanel{
 
             repaint();
             }
-            System.out.println("Board FEN: " + FENUtil.positionToFEN(board.getPosition()));
+            //System.out.println("Board FEN: " + FENUtil.positionToFEN(board.getPosition()));
+            //System.out.println("Board eval: " + Engine.getPositionEval(board.getPosition()));
         }
     }
 

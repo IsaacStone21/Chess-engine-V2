@@ -1,13 +1,17 @@
 package GUI;
 
-//TODO: Refactor interface to allow player to play against engine
-//TODO: Fix bug that causes pawn to overlay queen on promotion and captures
-//TODO: Board is logging the first move when it is white but it is not shown on the board
-
+import EngineUtil.Engine;
 
 
 public class Main {
  public static void main(String[] args) {
-    new LaunchPage();
+    //new LaunchPage();
+
+    int numMoves;
+
+    for (int depth = 0; depth < 8; depth++) {
+      numMoves = Engine.getNumPossiblePositions(depth);
+      System.out.println("Num Possible Positions after " + depth + " moves: " + numMoves);
+    }
   }
  }
