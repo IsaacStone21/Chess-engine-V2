@@ -17,13 +17,6 @@ public class MoveGenerator {
     //second is the direction: Up, down, left, right, UL, UR, DL, DR
     int[][] numSquaresToEdge = new int[64][8];
 
-    //ray of squares (to the edge of the board, ignoring occupancy) from a square in a given direction
-    //indexed [direction][square], direction order matches directionOffsets: Up, Down, Left, Right, UL, UR, DL, DR
-    long[][] rayAttacks = new long[8][64];
-
-    //true if moving in this direction increases the square index (Down, Right, DL, DR)
-    boolean[] directionIncreasesIndex = {false, true, false, true, false, false, true, true};
-
     long[] kingAttackTable = new long[64];
 
     //attacks[square] = squares a pawn of that color on `square` attacks; used both to generate pawn
@@ -43,7 +36,6 @@ public class MoveGenerator {
     public MoveGenerator() {
         generateSquaresToEdge();
         generateKnightTable();
-        generateRayAttacks();
         generateKingTable();
         generatePawnAttackTables();
     }
@@ -127,52 +119,16 @@ public class MoveGenerator {
         }
     }
 
-    private void generateRayAttacks() {
-        for (int square = 0; square < 64; square++) {
-            for (int dir = 0; dir < 8; dir++) {
-                long ray = 0L;
-                int current = square;
-
-                for (int step = 0; step < numSquaresToEdge[square][dir]; step++) {
-                    current += directionOffsets[dir];
-                    ray |= Position.bit(current);
-                }
-
-                rayAttacks[dir][square] = ray;
-            }
-        }
-    }
-
-    //returns the squares a slider on `square` can reach in a single direction, stopping at (and including) the first blocker
-    private long getRayAttacks(int square, int direction, long occupied) {
-        long attacks = rayAttacks[direction][square];
-        long blockers = attacks & occupied;
-
-        if (blockers == 0) {
-            return attacks;
-        }
-
-        int blockerSquare = directionIncreasesIndex[direction]
-                ? Long.numberOfTrailingZeros(blockers)
-                : 63 - Long.numberOfLeadingZeros(blockers);
-
-        //rayAttacks[direction][blockerSquare] is everything strictly beyond the blocker; cut that off
-        return attacks & ~rayAttacks[direction][blockerSquare];
-    }
-
+    //sliding attacks via magic bitboard lookup (see MagicBitboards); `occupied` blockers are included in the result
     private long getSlidingAttacks(int square, long occupied, boolean orthogonal, boolean diagonal) {
         long attacks = 0L;
 
         if (orthogonal) {
-            for (int dir = 0; dir <= 3; dir++) {
-                attacks |= getRayAttacks(square, dir, occupied);
-            }
+            attacks |= MagicBitboards.rookAttacks(square, occupied);
         }
 
         if (diagonal) {
-            for (int dir = 4; dir <= 7; dir++) {
-                attacks |= getRayAttacks(square, dir, occupied);
-            }
+            attacks |= MagicBitboards.bishopAttacks(square, occupied);
         }
 
         return attacks;
@@ -394,11 +350,11 @@ public class MoveGenerator {
             //the hexadecimal ensure that the pawns are moving to the correct rank
             long doublePush = (singlePush << 8) & ~occupiedSquares & 0x00000000FF000000L;
 
-            //the hexadecimal ensure the H file isn't being attacked because that would be immpossible to be attacking left and attacking the H file
-            long leftAttack = ((pawns & ~0x0101010101010101L) << 9) & enemyPieces;
+            //<< 9 moves one column right (+1), so pawns already in column 7 are excluded or they'd wrap to column 0
+            long leftAttack = ((pawns & ~0x8080808080808080L) << 9) & enemyPieces;
 
-            //same concept as left attack but with the A file
-            long rightAttack = ((pawns & ~0x8080808080808080L) << 7) & enemyPieces;
+            //<< 7 moves one column left (-1), so pawns in column 0 are excluded or they'd wrap to column 7
+            long rightAttack = ((pawns & ~0x0101010101010101L) << 7) & enemyPieces;
 
             while(singlePush != 0) {
                 int targetSquare = Long.numberOfTrailingZeros(singlePush);
@@ -445,18 +401,40 @@ public class MoveGenerator {
     }
 
 
+    //our pawns that can capture onto the en passant square are exactly the squares an enemy-colored
+    //pawn standing there would attack (same symmetry trick as isSquareAttacked)
+    private List<Move> generateEnPassantMoves(Position position) {
+        List<Move> moves = new ArrayList<>();
+        int epSquare = position.getEnPassantSquare();
+
+        if(epSquare == -1) {
+            return moves;
+        }
+
+        boolean white = position.isWhiteToMove();
+        long pawns = white ? position.whitePawns : position.blackPawns;
+        long attackers = (white ? blackPawnAttackTable[epSquare] : whitePawnAttackTable[epSquare]) & pawns;
+
+        while(attackers != 0) {
+            moves.add(new Move(Long.numberOfTrailingZeros(attackers), epSquare, true, false, false));
+            attackers &= attackers - 1;
+        }
+
+        return moves;
+    }
+
+
     public int getNumLegalMoves(Position currentPosition) {
         return generateMoves(currentPosition).size();
     }
 
 
     public List<Move> generateMoves(Position currentPosition) {
-    long startTime = System.nanoTime();
-
     boolean whiteToMove = currentPosition.isWhiteToMove();
 
     List<Move> pseudoLegalMoves = new ArrayList<>();
     pseudoLegalMoves.addAll(generatePawnMoves(currentPosition));
+    pseudoLegalMoves.addAll(generateEnPassantMoves(currentPosition));
     pseudoLegalMoves.addAll(generateKnightMoves(currentPosition));
     pseudoLegalMoves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteRooks : currentPosition.blackRooks, true, false));
     pseudoLegalMoves.addAll(generateSlidingMoves(currentPosition, whiteToMove ? currentPosition.whiteBishops : currentPosition.blackBishops, false, true));
@@ -478,20 +456,6 @@ public class MoveGenerator {
             moves.add(move);
         }
     }
-
-    long finishTime = System.nanoTime();
-
-    times.add(finishTime - startTime);
-    long sum = 0;
-
-    for(int i = 0; i < times.size(); i++) {
-        sum += times.get(i);
-    }
-
-    long avg = sum / times.size();
-
-    //System.out.println("Average time to compute: " + avg + " nanoseconds");
-    //System.out.println("Num legal Moves: " + moves.size());
 
     return moves;
     }

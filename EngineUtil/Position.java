@@ -6,7 +6,7 @@ public class Position {
     private Move lastMove;
     private Position lastPosition;
 
-     long whitePawns;
+    long whitePawns;
     long whiteKnights;
     long whiteBishops;
     long whiteRooks;
@@ -27,10 +27,12 @@ public class Position {
     // sets values inside to false if a king or rook moves
     private boolean[] castlingCheck = new boolean[4];
 
+    // square a pawn can capture onto en passant this turn, or -1 if none
+    private int enPassantSquare = -1;
+
 
     public Position() {
         whiteToMove = true;
-
 
         whitePawns = 0x00FF000000000000L;
         whiteKnights = 0x4200000000000000L;
@@ -80,6 +82,7 @@ public class Position {
 
         this.whiteToMove = newPosition.whiteToMove;
         this.castlingCheck = newPosition.castlingCheck.clone();
+        this.enPassantSquare = newPosition.enPassantSquare;
 
         this.lastMove = newPosition.lastMove;
         this.lastPosition = newPosition.lastPosition;
@@ -213,6 +216,11 @@ public class Position {
         setSquare(targetIndex, white, Piece.queen);
     }
 
+    //a double push leaves the skipped-over square open to en passant for exactly one turn
+    enPassantSquare = (movingType == Piece.pawn && Math.abs(targetIndex - startIndex) == 16)
+            ? (startIndex + targetIndex) / 2
+            : -1;
+
     updateCastlingCheck(acceptedMove);
     switchTurns();
 
@@ -243,9 +251,14 @@ public class Position {
 
     this.whiteToMove = previous.whiteToMove;
     this.castlingCheck = previous.castlingCheck.clone();
+    this.enPassantSquare = previous.enPassantSquare;
 
     this.lastMove = previous.lastMove;
     this.lastPosition = previous.lastPosition;
+   }
+
+   public int getEnPassantSquare() {
+    return enPassantSquare;
    }
 
    public Move getLastMove() {
