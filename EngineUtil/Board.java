@@ -1,23 +1,21 @@
 package EngineUtil;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
 public class Board {
     private Position position;
-    private List<Move> acceptedMoves;
     private boolean playerIsWhite;
     private MoveGenerator moveGenerator;
     private Random random;
+    private short[] moveBuffer;
 
     static Board board;
 
     private Board (){
         position = new Position();
-        acceptedMoves = new ArrayList<>();
         moveGenerator = new MoveGenerator();
         random = new Random();
+        moveBuffer = new short[MoveGenerator.maxMoves];
     }
 
     public static Board createBoard() {
@@ -28,8 +26,9 @@ public class Board {
         return board;
     }
 
+    //the position's undo stack doubles as the game's move history
     public int getNumMoves() {
-        return acceptedMoves.size();
+        return position.getPly();
     }
 
     public Position getPosition() {
@@ -45,26 +44,24 @@ public class Board {
             return;
         }
 
-        var moves = moveGenerator.generateMoves(position);
+        int numMoves = moveGenerator.generateMoves(position, moveBuffer);
 
         String color = position.isWhiteToMove() ? "White: " : "Black: ";
 
-        System.out.println("Num Legal Moves for " + color + moves.size());
+        System.out.println("Num Legal Moves for " + color + numMoves);
 
-        Move move = moves.get(random.nextInt(moves.size()));
+        short move = moveBuffer[random.nextInt(numMoves)];
 
         logMove(move);
     }
 
-    public void logMove(Move acceptedMove) {
-        acceptedMoves.addLast(acceptedMove);
+    public void logMove(short acceptedMove) {
         position.playMove(acceptedMove);
     }
 
     public void undoMove() {
         position.undoMove();
-        acceptedMoves.removeLast();
     }
 
-    
+
 }

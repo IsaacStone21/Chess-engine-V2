@@ -7,7 +7,7 @@ public class Main {
  public static void main(String[] args) {
     //new LaunchPage();
 
-    int numMoves;
+    long numMoves;
 
     for (int depth = 0; depth < 8; depth++) {
       numMoves = Engine.getNumPossiblePositions(depth);

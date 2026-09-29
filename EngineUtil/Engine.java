@@ -50,19 +50,30 @@ public class Engine {
     } 
 
 
-    public static int getNumPossiblePositions(int depth) {
+    //one move buffer per remaining depth, so the recursion never allocates
+    private static short[][] moveBuffers = new short[0][];
+
+    public static long getNumPossiblePositions(int depth) {
+        if(moveBuffers.length < depth) {
+            moveBuffers = new short[depth][MoveGenerator.maxMoves];
+        }
+
+        return countPositions(board.getPosition(), depth);
+    }
+
+    private static long countPositions(Position position, int depth) {
         if(depth == 0) {
             return 1;
         }
 
-        int numPositions = 0;
+        short[] moves = moveBuffers[depth - 1];
+        long numMoves = moveGenerator.generateMoves(position, moves);
+        long numPositions = 0;
 
-        var positions = moveGenerator.generateMoves(board.getPosition());
-
-        for(int index = 0; index < positions.size(); index++) {
-            board.logMove(positions.get(index));
-            numPositions += getNumPossiblePositions(depth - 1);
-            board.undoMove();
+        for(int index = 0; index < numMoves; index++) {
+            position.playMove(moves[index]);
+            numPositions += countPositions(position, depth - 1);
+            position.undoMove();
         }
 
         return numPositions;

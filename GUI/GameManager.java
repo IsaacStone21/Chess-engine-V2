@@ -17,6 +17,7 @@ import EngineUtil.Engine;
 import EngineUtil.FENUtil;
 import EngineUtil.Move;
 import EngineUtil.MoveGenerator;
+import EngineUtil.Piece;
 
 
 public class GameManager extends JPanel{
@@ -138,9 +139,21 @@ public class GameManager extends JPanel{
         }
     }
 
-    private void playMove(Move move) {
+    private void playMove(short move) {
         board.logMove(move);
         updateBoardInterface();
+    }
+
+    //returns the chosen piece type, or Piece.empty if the dialog was closed
+    private int askPromotionPiece() {
+        String[] options = {"Queen", "Rook", "Bishop", "Knight"};
+
+        int choice = JOptionPane.showOptionDialog(this, "Promote pawn to:",
+         "Promotion", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE,
+          null, options, options[0]);
+
+        //options line up with Move.promotionPieces
+        return choice < 0 ? Piece.empty : Move.promotionPieces[choice];
     }
 
     private int getIndex(Point point) {
@@ -213,10 +226,17 @@ public class GameManager extends JPanel{
             int newX;
             int newY;
 
-            Move requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex, board.getPosition());
+            short requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex, board.getPosition());
+
+            if (requestedMove != Move.none && Move.isPromotion(requestedMove)) {
+                int promotionPiece = askPromotionPiece();
+                //closing the dialog cancels the move and puts the pawn back
+                requestedMove = promotionPiece == Piece.empty ? Move.none
+                        : moveGenerator.getLegalMove(startIndex, targetIndex, promotionPiece, board.getPosition());
+            }
 
 
-            if ((image != null && requestedMove != null) ) {
+            if ((image != null && requestedMove != Move.none) ) {
 
             row = (targetIndex - (targetIndex % 8)) / 8;
             col = targetIndex - 8*row;
