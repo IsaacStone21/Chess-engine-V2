@@ -4,8 +4,8 @@ public class Board {
     private Position position;
     private boolean playerIsWhite;
 
-    //plies the engine searches when picking its move
-    private static final int searchDepth = 5;
+    //how long the engine thinks about each move; it searches as deep as it can in that time
+    private static final long thinkTimeMillis = 1000;
 
     static Board board;
 
@@ -38,19 +38,24 @@ public class Board {
         playerIsWhite = playerWhite;
     }
 
-    public void playEngineMove() {
-        if(playerIsWhite == position.isWhiteToMove()) {
-            return;
-        }
+    public boolean isEngineTurn() {
+        return playerIsWhite != position.isWhiteToMove();
+    }
 
-        short move = Engine.findBestMove(position, searchDepth);
+    //the engine plays moves on whatever position it's searching, so a search on another thread needs its own
+    //copy; take it on the thread that owns the board, before handing it to findEngineMove
+    public Position copyPosition() {
+        return new Position(position);
+    }
 
-        //no legal moves means the game is already over
-        if(move == Move.none) {
-            return;
-        }
+    //blocks for the think time, so call it off the GUI thread; returns Move.none if the game is already over
+    public short findEngineMove(Position snapshot) {
+        return Engine.findBestMove(snapshot, thinkTimeMillis);
+    }
 
-        logMove(move);
+    //abandons the current search, e.g. when its game has been thrown away
+    public void stopEngine() {
+        Engine.stopSearch();
     }
 
     public void logMove(short acceptedMove) {

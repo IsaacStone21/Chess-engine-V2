@@ -16,9 +16,13 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import EngineUtil.Board;
@@ -27,6 +31,7 @@ import EngineUtil.FENUtil;
 import EngineUtil.Move;
 import EngineUtil.MoveGenerator;
 import EngineUtil.Piece;
+import EngineUtil.Position;
 
 
 public class GameManager extends JPanel{
@@ -63,6 +68,21 @@ public class GameManager extends JPanel{
     private Board board;
     private MoveGenerator moveGenerator;
 
+    //the engine searches on its own thread so the window keeps responding while it thinks. It's a single
+    //thread because the engine's search state is static, so two searches must never run at once; it's a
+    //daemon so it doesn't keep the program alive after the window closes
+    private final ExecutorService engineThread = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "Engine");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    //the player can't move while this is set
+    private boolean engineThinking;
+
+    //bumped every new game, so a search that finishes after its game was abandoned gets ignored
+    private int gameNumber;
+
     //end screen: a result card that fades in over the board once the game is over; "View Board" hides it
     //so the final position can be studied, and clicking the board brings it back
     private boolean endScreenVisible;
@@ -96,13 +116,35 @@ public class GameManager extends JPanel{
     private final Font buttonFont = new Font(Font.SANS_SERIF, Font.BOLD, 14);
     private final Font hintFont = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
 
+    //eval bar: a strip to the right of the board showing how the engine rates the position, with white's
+    //share filling up from the bottom
+    private static final int barGap = 8;
+    private static final int barWidth = 28;
+    //the board, then the bar, then a margin matching the gap so the bar isn't jammed against the window edge
+    static final int panelWidth = 8 * LaunchPage.tileSize + barGap + barWidth + barGap;
+    static final int panelHeight = 8 * LaunchPage.tileSize;
+
+    private final Color barWhiteColor = new Color(0xf2ebe4);
+    private final Color barBlackColor = new Color(0x2b2420);
+    private final Color barMidlineColor = new Color(128, 128, 128, 140);
+    private final Font barFont = new Font(Font.SANS_SERIF, Font.BOLD, 10);
+
+    //white's share of the bar, from 0 to 1: the target is the latest eval and the shown value eases toward
+    //it, so the bar slides instead of jumping
+    private float barTarget;
+    private float barShown;
+    private String barLabel;
+    //the label sits at the end of whichever side is ahead
+    private boolean barLabelOnWhite;
+    private Timer barTimer;
+
 
     public GameManager() {
 
     image = null;
     imageCorner = new Point(0, 0);
 
-    this.setSize(8*tileSize + 10, 8*tileSize + 35);
+    this.setSize(panelWidth, panelHeight);
 
         ClickListener clickListener = new ClickListener();
         this.addMouseListener(clickListener);
@@ -115,14 +157,22 @@ public class GameManager extends JPanel{
         Engine.initiateEngine();
 
         fadeTimer = new Timer(15, e -> stepFade());
+        barTimer = new Timer(15, e -> stepBar());
 
         startNewGame();
     }
 
     private void startNewGame() {
+        gameNumber++;
+        if (engineThinking) {
+            board.stopEngine();
+            engineThinking = false;
+        }
+
         board.newGame();
         gameStatus = GameStatus.ONGOING;
         hideEndScreen();
+        resetEvalBar();
         image = null;
         draggable = false;
 
@@ -135,11 +185,63 @@ public class GameManager extends JPanel{
 
         board.setPlayerColor(playerIsWhite);
 
-        if (!playerIsWhite) {
-            board.playEngineMove();
+        updateBoardInterface();
+        startEngineMove();
+    }
+
+    //hands a copy of the position to the engine thread; the move comes back to finishEngineMove on the
+    //Swing thread, so the real board is only ever touched from one thread
+    private void startEngineMove() {
+        if (!board.isEngineTurn()) {
+            return;
         }
 
-        updateBoardInterface();
+        engineThinking = true;
+        int game = gameNumber;
+        Position snapshot = board.copyPosition();
+
+        engineThread.execute(() -> {
+            short move = Move.none;
+            int score = 0;
+            int depth = 0;
+            try {
+                move = board.findEngineMove(snapshot);
+                //read here, on the thread that just ran the search, so another search can't overwrite them first
+                score = Engine.getLastScore();
+                depth = Engine.getLastDepth();
+            } catch (RuntimeException e) {
+                //still report back, or engineThinking would stay set and lock the board for good
+                e.printStackTrace();
+            }
+
+            short engineMove = move;
+            //the search scores from the engine's side; the bar wants white's
+            int whiteScore = snapshot.isWhiteToMove() ? score : -score;
+            int searchDepth = depth;
+            SwingUtilities.invokeLater(() -> finishEngineMove(engineMove, whiteScore, searchDepth, game));
+        });
+    }
+
+    private void finishEngineMove(short move, int whiteScore, int depth, int game) {
+        if (game != gameNumber) {
+            return;
+        }
+
+        engineThinking = false;
+
+        if (move != Move.none) {
+            playMove(move);
+        }
+
+        //depth 0 means the engine didn't search (it had only one legal move), so there's no new score
+        if (depth > 0) {
+            setEval(whiteScore);
+        }
+
+        updateGameStatus();
+        if (gameStatus != GameStatus.ONGOING) {
+            endGame();
+        }
     }
 
 
@@ -162,8 +264,97 @@ public class GameManager extends JPanel{
     private void endGame() {
         image = null;
         draggable = false;
+
+        if (gameStatus == GameStatus.CHECKMATE) {
+            boolean whiteWon = !whiteHasNoMoves();
+            setBar(whiteWon ? 1f : 0f, whiteWon ? "1-0" : "0-1", whiteWon);
+        } else {
+            setBar(0.5f, "½", true);
+        }
+
         updateBoardInterface();
         showEndScreen(endScreenDelay);
+    }
+
+    private void resetEvalBar() {
+        barTimer.stop();
+        barTarget = 0.5f;
+        barShown = 0.5f;
+        barLabel = "0.0";
+        barLabelOnWhite = true;
+        repaint();
+    }
+
+    //whiteScore is the engine's search score in centipawns, from white's side, for the position it just moved into
+    private void setEval(int whiteScore) {
+        boolean whiteAhead = whiteScore >= 0;
+
+        if (Engine.isMateScore(whiteScore)) {
+            //the score was measured before the engine's move, which used up one of the plies to mate; the side
+            //delivering mate moves on every other remaining ply, so that's half of them rounded up, which
+            //works out to the original ply count halved
+            int movesToMate = Engine.pliesToMate(whiteScore) / 2;
+            setBar(whiteAhead ? 1f : 0f, "M" + movesToMate, whiteAhead);
+            return;
+        }
+
+        //maps the score to white's expected share of the points, so the first pawn or two of advantage moves the
+        //bar a lot while +10 against +11 barely moves it; kept off the ends so those are reserved for mates
+        double share = 1 / (1 + Math.exp(-0.00368 * whiteScore));
+        share = Math.max(0.05, Math.min(0.95, share));
+
+        double pawns = Math.abs(whiteScore) / 100.0;
+        String label = pawns < 10 ? String.format(Locale.ROOT, "%.1f", pawns) : String.valueOf(Math.round(pawns));
+
+        setBar((float) share, label, whiteAhead);
+    }
+
+    private void setBar(float whiteShare, String label, boolean labelOnWhite) {
+        barTarget = whiteShare;
+        barLabel = label;
+        barLabelOnWhite = labelOnWhite;
+        barTimer.restart();
+        repaint();
+    }
+
+    private void stepBar() {
+        barShown += (barTarget - barShown) * 0.2f;
+        if (Math.abs(barTarget - barShown) < 0.002f) {
+            barShown = barTarget;
+            barTimer.stop();
+        }
+        repaint();
+    }
+
+    private void paintEvalBar(Graphics2D g2) {
+        int boardSize = 8 * tileSize;
+        int x = boardSize + barGap;
+
+        Shape oldClip = g2.getClip();
+        g2.clip(new RoundRectangle2D.Float(x, 0, barWidth, boardSize, 8, 8));
+
+        g2.setColor(barBlackColor);
+        g2.fillRect(x, 0, barWidth, boardSize);
+
+        int whiteHeight = Math.round(barShown * boardSize);
+        g2.setColor(barWhiteColor);
+        g2.fillRect(x, boardSize - whiteHeight, barWidth, whiteHeight);
+
+        //marks the even point, so small advantages are easy to read
+        g2.setColor(barMidlineColor);
+        g2.fillRect(x, boardSize / 2 - 1, barWidth, 2);
+
+        g2.setClip(oldClip);
+
+        g2.setFont(barFont);
+        int centerX = x + barWidth / 2;
+        if (barLabelOnWhite) {
+            g2.setColor(barBlackColor);
+            drawCentered(g2, barLabel, centerX, boardSize - 6);
+        } else {
+            g2.setColor(barWhiteColor);
+            drawCentered(g2, barLabel, centerX, 6 + g2.getFontMetrics().getAscent());
+        }
     }
 
     private void showEndScreen(int delay) {
@@ -410,7 +601,12 @@ public class GameManager extends JPanel{
         return choice < 0 ? Piece.empty : Move.promotionPieces[choice];
     }
 
+    //returns the square under the point, or -1 if it's off the board (e.g. over the eval bar)
     private int getIndex(Point point) {
+            if (point.getX() < 0 || point.getY() < 0 || point.getX() >= 8 * tileSize || point.getY() >= 8 * tileSize) {
+                return -1;
+            }
+
             double row = (point.getY() - point.getY()%tileSize)/ tileSize;
             double col = (point.getX() - point.getX()%tileSize)/ tileSize;
 
@@ -448,7 +644,9 @@ public class GameManager extends JPanel{
                 pieces[i].paintIcon(this, g, x, y);
             }
         }
-        
+
+        paintEvalBar(g2);
+
         
         if (image != null) {
             image.paintIcon(this, g, (int)imageCorner.getX(), (int)imageCorner.getY());
@@ -472,8 +670,19 @@ public class GameManager extends JPanel{
                 return;
             }
 
+            if (engineThinking) {
+                draggable = false;
+                return;
+            }
+
             prevPt = e.getPoint();
+            //a click with no drag never sets currentPoint, so start it where the press happened
+            currentPoint = prevPt;
             int index = getIndex(prevPt);
+            if (index < 0) {
+                draggable = false;
+                return;
+            }
         if (playerIsWhite == FENUtil.FENtoPosition(FENUtil.PNGPositionToFEN(pieces))[index].isWhite() && pieces[index] != null){
             startIndex = index;
             image = pieces[index];
@@ -500,7 +709,9 @@ public class GameManager extends JPanel{
             int newX;
             int newY;
 
-            short requestedMove = moveGenerator.getLegalMove(startIndex, targetIndex, board.getPosition());
+            //dropping the piece off the board puts it back
+            short requestedMove = targetIndex < 0 ? Move.none
+                    : moveGenerator.getLegalMove(startIndex, targetIndex, board.getPosition());
 
             if (requestedMove != Move.none && Move.isPromotion(requestedMove)) {
                 int promotionPiece = askPromotionPiece();
@@ -527,18 +738,8 @@ public class GameManager extends JPanel{
                 return;
             }
 
-            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
-
-            board.playEngineMove();
-
-            updateGameStatus();
-
-            if(gameStatus != GameStatus.ONGOING) {
-                endGame();
-                return;
-            }
-
-            pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+            //the player's move is already on screen; the engine's reply shows up when its search finishes
+            startEngineMove();
 
             image = null;
 

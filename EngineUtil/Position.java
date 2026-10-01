@@ -75,6 +75,36 @@ public class Position {
         occupied = whitePieces | blackPieces;
     }
 
+    //independent copy, so the engine can play moves on it from another thread without touching the original
+    public Position(Position other) {
+        whiteToMove = other.whiteToMove;
+
+        whitePawns = other.whitePawns;
+        whiteKnights = other.whiteKnights;
+        whiteBishops = other.whiteBishops;
+        whiteRooks = other.whiteRooks;
+        whiteQueens = other.whiteQueens;
+        whiteKing = other.whiteKing;
+
+        blackPawns = other.blackPawns;
+        blackKnights = other.blackKnights;
+        blackBishops = other.blackBishops;
+        blackRooks = other.blackRooks;
+        blackQueens = other.blackQueens;
+        blackKing = other.blackKing;
+
+        whitePieces = other.whitePieces;
+        blackPieces = other.blackPieces;
+        occupied = other.occupied;
+
+        castlingRights = other.castlingRights;
+        enPassantSquare = other.enPassantSquare;
+
+        moveStack = other.moveStack.clone();
+        undoStack = other.undoStack.clone();
+        ply = other.ply;
+    }
+
 
     public boolean isWhiteToMove() {
         return whiteToMove;
@@ -126,7 +156,7 @@ public class Position {
    }
 
    //returns the type of the given color's piece on this square, or Piece.empty
-   private int pieceTypeAt(int index, boolean white) {
+   int pieceTypeAt(int index, boolean white) {
     long mask = bit(index);
 
     if(white) {

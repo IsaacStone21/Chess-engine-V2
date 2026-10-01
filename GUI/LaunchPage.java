@@ -1,4 +1,6 @@
 package GUI;
+import java.awt.Dimension;
+
 import javax.swing.JFrame;
 
 
@@ -26,8 +28,9 @@ public class LaunchPage {
  
     public LaunchPage() {
         frame = new JFrame();
-        frame.setSize(8*tileSize + 10, 8*tileSize + 35);
         frame.setLayout(null);
+        //size the inside of the window and let pack() add the title bar and borders, whose size varies by OS
+        frame.getContentPane().setPreferredSize(new Dimension(GameManager.panelWidth, GameManager.panelHeight));
         
         frame.setTitle("Chess");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -38,6 +41,7 @@ public class LaunchPage {
         frame.add(window);
         window.setVisible(true);
 
+        frame.pack();
         frame.setVisible(true);
     }
 }
