@@ -1,21 +1,16 @@
 package EngineUtil;
 
-import java.util.Random;
-
 public class Board {
     private Position position;
     private boolean playerIsWhite;
-    private MoveGenerator moveGenerator;
-    private Random random;
-    private short[] moveBuffer;
+
+    //plies the engine searches when picking its move
+    private static final int searchDepth = 5;
 
     static Board board;
 
     private Board (){
         position = new Position();
-        moveGenerator = new MoveGenerator();
-        random = new Random();
-        moveBuffer = new short[MoveGenerator.maxMoves];
     }
 
     public static Board createBoard() {
@@ -35,6 +30,10 @@ public class Board {
         return position;
     }
 
+    public void newGame() {
+        position = new Position();
+    }
+
     public void setPlayerColor(boolean playerWhite) {
         playerIsWhite = playerWhite;
     }
@@ -44,13 +43,12 @@ public class Board {
             return;
         }
 
-        int numMoves = moveGenerator.generateMoves(position, moveBuffer);
+        short move = Engine.findBestMove(position, searchDepth);
 
-        String color = position.isWhiteToMove() ? "White: " : "Black: ";
-
-        System.out.println("Num Legal Moves for " + color + numMoves);
-
-        short move = moveBuffer[random.nextInt(numMoves)];
+        //no legal moves means the game is already over
+        if(move == Move.none) {
+            return;
+        }
 
         logMove(move);
     }
