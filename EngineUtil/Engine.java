@@ -249,6 +249,27 @@ public class Engine {
     private static int lastDepth;
     private static int lastScore;
 
+    //transposition table: what earlier searches learned about each position, keyed by its hash. The same position
+    //is reached through many move orders, so a stored result often saves searching it again; and even when the
+    //stored search was too shallow to reuse its score, its best move is the best first guess for move ordering.
+    //Entries are spread over parallel arrays, indexed by the low bits of the hash, and survive between searches
+    private static final int tableSizeBits = 20;
+    private static final int tableMask = (1 << tableSizeBits) - 1;
+    private static final long[] tableKeys = new long[1 << tableSizeBits];
+    private static final short[] tableMoves = new short[1 << tableSizeBits];
+    private static final int[] tableScores = new int[1 << tableSizeBits];
+    private static final byte[] tableDepths = new byte[1 << tableSizeBits];
+    private static final byte[] tableBounds = new byte[1 << tableSizeBits];
+
+    //what a stored score means: alpha-beta cuts searches short, so often the score is only known to be at
+    //least (a beta cutoff) or at most (no move beat alpha) the stored value. Zero marks an empty slot
+    private static final byte exactScore = 1;
+    private static final byte lowerBound = 2;
+    private static final byte upperBound = 3;
+
+    //the table's best move is searched before everything else, captures included
+    private static final int tableMoveOrderingScore = 1_000_000;
+
     //searches 1 ply deep, then 2, then 3... until the time runs out, and returns the best move found.
     //each search reuses the previous one's best move as its first guess, so the shallow searches pay for
     //themselves by making the deeper ones prune better
@@ -267,8 +288,10 @@ public class Engine {
             return Move.none;
         }
 
-        //sort the root once so the first iteration starts from the obvious captures
-        scoreMoves(position, moves, scores, numMoves);
+        //sort the root once so the first iteration starts from the last search's best move, if it saw this
+        //position, and then the obvious captures
+        long rootKey = position.getHash();
+        scoreMoves(position, moves, scores, numMoves, probeMove(rootKey));
         for(int index = 0; index < numMoves; index++) {
             pickNextMove(moves, scores, index, numMoves);
         }
@@ -314,6 +337,7 @@ public class Engine {
 
             lastDepth = depth;
             lastScore = alpha;
+            store(rootKey, depth, exactScore, alpha, bestMove, 0);
 
             //a forced mate was found; searching deeper can't find anything better
             if(alpha >= MATE - maxPly) {
@@ -353,6 +377,56 @@ public class Engine {
         return aborted;
     }
 
+    //the stored best move for this position, or Move.none if the table hasn't seen it
+    private static short probeMove(long key) {
+        int index = (int) key & tableMask;
+        return tableBounds[index] != 0 && tableKeys[index] == key ? tableMoves[index] : Move.none;
+    }
+
+    private static void store(long key, int depth, byte bound, int score, short move, int ply) {
+        int index = (int) key & tableMask;
+        boolean samePosition = tableBounds[index] != 0 && tableKeys[index] == key;
+
+        //a deeper result for the same position is worth more than this one; anything else gets overwritten,
+        //since a newer entry is more likely to be needed again soon
+        if(samePosition && tableDepths[index] > depth) {
+            return;
+        }
+
+        //a search where no move beat alpha doesn't know the best move, so keep the one already stored
+        if(move == Move.none && samePosition) {
+            move = tableMoves[index];
+        }
+
+        tableKeys[index] = key;
+        tableMoves[index] = move;
+        tableScores[index] = scoreToTable(score, ply);
+        tableDepths[index] = (byte) depth;
+        tableBounds[index] = bound;
+    }
+
+    //mate scores count plies from the root, but a table entry can be reached at any ply, so they're stored
+    //counting from the position itself and converted back when read
+    private static int scoreToTable(int score, int ply) {
+        if(score >= MATE - maxPly) {
+            return score + ply;
+        }
+        if(score <= -(MATE - maxPly)) {
+            return score - ply;
+        }
+        return score;
+    }
+
+    private static int scoreFromTable(int score, int ply) {
+        if(score >= MATE - maxPly) {
+            return score - ply;
+        }
+        if(score <= -(MATE - maxPly)) {
+            return score + ply;
+        }
+        return score;
+    }
+
     //shifts moves[0..index-1] back one slot and puts moves[index] first, keeping the rest in order
     private static void moveToFront(short[] moves, int index) {
         short move = moves[index];
@@ -364,6 +438,12 @@ public class Engine {
     //alpha is what the side to move is already guaranteed, beta is the most the opponent will allow
     private static int negamax(Position position, int depth, int ply, int alpha, int beta) {
         if(outOfTime()) {
+            return 0;
+        }
+
+        //a position that already came up can be repeated into a draw, and the fifty-move rule ends the game, so
+        //both score as draws: the engine then avoids repeating when it's winning and heads for it when losing
+        if(position.isRepetition() || position.getHalfmoveClock() >= 100) {
             return 0;
         }
 
@@ -383,6 +463,30 @@ public class Engine {
             return quiescence(position, ply, alpha, beta);
         }
 
+        long key = position.getHash();
+        int tableIndex = (int) key & tableMask;
+        short tableMove = Move.none;
+
+        if(tableBounds[tableIndex] != 0 && tableKeys[tableIndex] == key) {
+            tableMove = tableMoves[tableIndex];
+
+            //the score is only reusable if it came from a search at least this deep
+            if(tableDepths[tableIndex] >= depth) {
+                int score = scoreFromTable(tableScores[tableIndex], ply);
+                byte bound = tableBounds[tableIndex];
+
+                if(bound == exactScore) {
+                    return Math.max(alpha, Math.min(beta, score));
+                }
+                if(bound == lowerBound && score >= beta) {
+                    return beta;
+                }
+                if(bound == upperBound && score <= alpha) {
+                    return alpha;
+                }
+            }
+        }
+
         short[] moves = searchBuffers[ply];
         int[] scores = scoreBuffers[ply];
         int numMoves = moveGenerator.generateMoves(position, moves);
@@ -392,7 +496,10 @@ public class Engine {
             return inCheck ? -MATE + ply : 0;
         }
 
-        scoreMoves(position, moves, scores, numMoves);
+        scoreMoves(position, moves, scores, numMoves, tableMove);
+
+        int originalAlpha = alpha;
+        short bestMove = Move.none;
 
         for(int index = 0; index < numMoves; index++) {
             pickNextMove(moves, scores, index, numMoves);
@@ -400,15 +507,23 @@ public class Engine {
             int score = -negamax(position, depth - 1, ply + 1, -beta, -alpha);
             position.undoMove();
 
+            //a stopped search's scores are meaningless, so none of them may reach the table
+            if(aborted) {
+                return 0;
+            }
+
             //the opponent already has a better option earlier in the tree, so they'll never allow this position
             if(score >= beta) {
+                store(key, depth, lowerBound, beta, moves[index], ply);
                 return beta;
             }
             if(score > alpha) {
                 alpha = score;
+                bestMove = moves[index];
             }
         }
 
+        store(key, depth, alpha > originalAlpha ? exactScore : upperBound, alpha, bestMove, ply);
         return alpha;
     }
 
@@ -442,7 +557,7 @@ public class Engine {
         }
 
         numMoves = keepCapturesAndPromotions(position, moves, numMoves);
-        scoreMoves(position, moves, scores, numMoves);
+        scoreMoves(position, moves, scores, numMoves, Move.none);
 
         for(int index = 0; index < numMoves; index++) {
             pickNextMove(moves, scores, index, numMoves);
@@ -484,12 +599,19 @@ public class Engine {
     private static final int[] orderingValues = {0, bishopValue, pawnValue, rookValue, knightValue, queenValue, 0};
 
     //alpha-beta prunes the most when the best move is searched first, so likely good moves get high scores:
-    //captures by most valuable victim, then least valuable attacker (MVV-LVA), plus promotions
-    private static void scoreMoves(Position position, short[] moves, int[] scores, int numMoves) {
+    //the transposition table's move first, then captures by most valuable victim and least valuable attacker
+    //(MVV-LVA), plus promotions
+    private static void scoreMoves(Position position, short[] moves, int[] scores, int numMoves, short tableMove) {
         boolean white = position.isWhiteToMove();
 
         for(int index = 0; index < numMoves; index++) {
             short move = moves[index];
+
+            if(move == tableMove) {
+                scores[index] = tableMoveOrderingScore;
+                continue;
+            }
+
             int score = 0;
 
             int victim = Move.isEnPessant(move) ? Piece.pawn : position.pieceTypeAt(Move.targetSquare(move), !white);

@@ -58,7 +58,10 @@ public class GameManager extends JPanel{
     private enum GameStatus {
         ONGOING,
         CHECKMATE,
-        STALEMATE
+        STALEMATE,
+        REPETITION,
+        FIFTY_MOVE_RULE,
+        INSUFFICIENT_MATERIAL
     }
 
     private boolean playerIsWhite;
@@ -250,14 +253,35 @@ public class GameManager extends JPanel{
         repaint(); 
     }
 
+    //checkmate and stalemate come first: a mate delivered on the move that would also trigger a draw rule still counts
     private void updateGameStatus() {
-        if(moveGenerator.getNumLegalMoves(board.getPosition()) != 0) {
-            gameStatus = GameStatus.ONGOING;
-        } else if (moveGenerator.inCheck(board.getPosition())) {
-            gameStatus = GameStatus.CHECKMATE;
+        Position position = board.getPosition();
+
+        if (moveGenerator.getNumLegalMoves(position) == 0) {
+            gameStatus = moveGenerator.inCheck(position) ? GameStatus.CHECKMATE : GameStatus.STALEMATE;
+        } else if (position.isThreefoldRepetition()) {
+            gameStatus = GameStatus.REPETITION;
+        } else if (position.getHalfmoveClock() >= 100) {
+            gameStatus = GameStatus.FIFTY_MOVE_RULE;
+        } else if (position.isInsufficientMaterial()) {
+            gameStatus = GameStatus.INSUFFICIENT_MATERIAL;
         } else {
-            gameStatus = GameStatus.STALEMATE;
+            gameStatus = GameStatus.ONGOING;
         }
+    }
+
+    //every ending except checkmate is a draw
+    private boolean isDraw() {
+        return gameStatus != GameStatus.ONGOING && gameStatus != GameStatus.CHECKMATE;
+    }
+
+    //big heading on the end card; the rule-based draws share "Draw" and name the rule on the line below
+    private String titleText() {
+        return switch (gameStatus) {
+            case CHECKMATE -> "Checkmate";
+            case STALEMATE -> "Stalemate";
+            default -> "Draw";
+        };
     }
 
     //called once the game is over: drops any piece still being dragged and fades the result card in
@@ -434,7 +458,7 @@ public class GameManager extends JPanel{
     }
 
     private Color resultColor() {
-        if (gameStatus == GameStatus.STALEMATE) {
+        if (isDraw()) {
             return drawColor;
         }
         boolean whiteWon = !whiteHasNoMoves();
@@ -442,11 +466,13 @@ public class GameManager extends JPanel{
     }
 
     private String outcomeText() {
-        if (gameStatus == GameStatus.STALEMATE) {
-            return "Draw";
-        }
-        boolean whiteWon = !whiteHasNoMoves();
-        return whiteWon == playerIsWhite ? "You win!" : "The engine wins";
+        return switch (gameStatus) {
+            case STALEMATE -> "Draw";
+            case REPETITION -> "Threefold repetition";
+            case FIFTY_MOVE_RULE -> "Fifty-move rule";
+            case INSUFFICIENT_MATERIAL -> "Insufficient material";
+            default -> !whiteHasNoMoves() == playerIsWhite ? "You win!" : "The engine wins";
+        };
     }
 
     private String detailText() {
@@ -455,10 +481,13 @@ public class GameManager extends JPanel{
         String stuck = whiteHasNoMoves() ? "White" : "Black";
         String other = whiteHasNoMoves() ? "Black" : "White";
 
-        if (gameStatus == GameStatus.CHECKMATE) {
-            return other + " checkmated " + stuck + " in " + moves;
-        }
-        return stuck + " has no legal moves after " + moves;
+        return switch (gameStatus) {
+            case CHECKMATE -> other + " checkmated " + stuck + " in " + moves;
+            case REPETITION -> "Same position three times, " + moves;
+            case FIFTY_MOVE_RULE -> "No capture or pawn move in 50 moves";
+            case INSUFFICIENT_MATERIAL -> "Neither side can checkmate";
+            default -> stuck + " has no legal moves after " + moves;
+        };
     }
 
     private int findKingSquare(boolean white) {
@@ -471,9 +500,19 @@ public class GameManager extends JPanel{
         return -1;
     }
 
-    //glows behind the king that can't move: red when mated, amber when stalemated
-    private void paintKingHighlight(Graphics2D g2) {
-        int square = findKingSquare(whiteHasNoMoves());
+    //glows behind the king that can't move: red when mated, amber when stalemated. Draws by rule leave both
+    //kings able to move, so both glow amber
+    private void paintKingHighlights(Graphics2D g2) {
+        if (gameStatus == GameStatus.CHECKMATE || gameStatus == GameStatus.STALEMATE) {
+            paintKingHighlight(g2, whiteHasNoMoves());
+        } else {
+            paintKingHighlight(g2, true);
+            paintKingHighlight(g2, false);
+        }
+    }
+
+    private void paintKingHighlight(Graphics2D g2, boolean whiteKing) {
+        int square = findKingSquare(whiteKing);
         if (square < 0) {
             return;
         }
@@ -529,7 +568,7 @@ public class GameManager extends JPanel{
 
         g.setColor(cardTextColor);
         g.setFont(titleFont);
-        drawCentered(g, gameStatus == GameStatus.CHECKMATE ? "Checkmate" : "Stalemate", centerX, card.y + 104);
+        drawCentered(g, titleText(), centerX, card.y + 104);
 
         g.setColor(accent.brighter());
         g.setFont(outcomeFont);
@@ -561,7 +600,7 @@ public class GameManager extends JPanel{
 
     //small pill at the top of the board while the end screen is hidden
     private void paintReturnHint(Graphics2D g2) {
-        String text = (gameStatus == GameStatus.CHECKMATE ? "Checkmate" : "Stalemate") + "  ·  click to show result";
+        String text = titleText() + "  ·  click to show result";
         g2.setFont(hintFont);
         FontMetrics metrics = g2.getFontMetrics();
 
@@ -632,7 +671,7 @@ public class GameManager extends JPanel{
         }
 
         if (gameStatus != GameStatus.ONGOING) {
-            paintKingHighlight(g2);
+            paintKingHighlights(g2);
         }
 
         for (int i = 0; i < 64; i++) {
