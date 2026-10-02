@@ -28,6 +28,9 @@ import java.util.zip.ZipInputStream;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
+//java Testing/Match.java HEAD
+
+
 //plays an old commit of the engine against the working tree (or against another commit) and reports the score.
 //Run it from anywhere in the repository, with no build step:
 //

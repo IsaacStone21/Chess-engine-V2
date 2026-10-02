@@ -267,8 +267,40 @@ public class Engine {
     private static final byte lowerBound = 2;
     private static final byte upperBound = 3;
 
-    //the table's best move is searched before everything else, captures included
+    //move ordering bands, best first: the table's move, then captures and queen promotions, then the two killers,
+    //then the remaining quiet moves by history score, which always stays within ±historyMax
     private static final int tableMoveOrderingScore = 1_000_000;
+    private static final int captureOrderingScore = 100_000;
+    private static final int firstKillerOrderingScore = 90_000;
+    private static final int secondKillerOrderingScore = 80_000;
+
+    //killer moves: the last two quiet moves that caused a beta cutoff at each ply. Positions at the same ply of the
+    //tree are usually siblings that differ by one move, so a move that refuted one of them often refutes the next
+    private static final short[][] killers = new short[maxPly][2];
+
+    //history heuristic: how often each quiet move, by side, start and target square, has caused a cutoff anywhere in
+    //the tree. Unlike killers it isn't tied to a ply, so it orders all the quiet moves the killers don't cover
+    private static final int[][][] history = new int[2][64][64];
+    private static final int historyMax = 16_384;
+
+    //null-move pruning: after passing the turn, the opponent's reply is searched this much shallower than normal
+    private static final int nullMoveReduction = 2;
+    private static final int deepNullMoveReduction = 3;
+    private static final int deepNullMoveDepth = 7;
+
+    //late move reductions: how many plies a late quiet move is searched shallower, by depth and by its index in the
+    //move list. Grows with both, since deep searches and moves far down a well ordered list are the safest to cut
+    private static final int lateMoveIndex = 3;
+    private static final int lateMoveMinDepth = 3;
+    private static final int[][] lateMoveReductions = new int[maxDepth * 2 + 1][MoveGenerator.maxMoves];
+
+    static {
+        for(int depth = 1; depth < lateMoveReductions.length; depth++) {
+            for(int index = 1; index < MoveGenerator.maxMoves; index++) {
+                lateMoveReductions[depth][index] = (int) (0.75 + Math.log(depth) * Math.log(index) / 2.25);
+            }
+        }
+    }
 
     //searches 1 ply deep, then 2, then 3... until the time runs out, and returns the best move found.
     //each search reuses the previous one's best move as its first guess, so the shallow searches pay for
@@ -279,6 +311,20 @@ public class Engine {
         aborted = false;
         lastDepth = 0;
         lastScore = 0;
+
+        //killers belong to plies of the last search's tree, which are different positions now; history describes
+        //moves in general, so it carries over at reduced weight
+        for(short[] plyKillers : killers) {
+            plyKillers[0] = Move.none;
+            plyKillers[1] = Move.none;
+        }
+        for(int[][] side : history) {
+            for(int[] from : side) {
+                for(int to = 0; to < 64; to++) {
+                    from[to] /= 2;
+                }
+            }
+        }
 
         short[] moves = searchBuffers[0];
         int[] scores = scoreBuffers[0];
@@ -291,7 +337,7 @@ public class Engine {
         //sort the root once so the first iteration starts from the last search's best move, if it saw this
         //position, and then the obvious captures
         long rootKey = position.getHash();
-        scoreMoves(position, moves, scores, numMoves, probeMove(rootKey));
+        scoreMoves(position, moves, scores, numMoves, probeMove(rootKey), 0);
         for(int index = 0; index < numMoves; index++) {
             pickNextMove(moves, scores, index, numMoves);
         }
@@ -487,6 +533,28 @@ public class Engine {
             }
         }
 
+        //null-move pruning: let the side to move pass, and search the opponent's reply with a reduced depth and a
+        //window that only asks "does it still reach beta?". Passing is almost always worse than the best real move,
+        //so if even passing reaches beta, the real moves would too and this node can be cut without searching them.
+        //Never when in check (passing would be illegal), right after another pass (two passes cancel out), when the
+        //static eval is already below beta (the pass will almost never reach it), or with only king and pawns left,
+        //where zugzwang is common and passing really can be better than every legal move
+        if(!inCheck && depth >= 3 && position.getLastMove() != Move.none && hasPiecesBesidesPawns(position)
+                && evaluateRelative(position) >= beta) {
+            int reduction = depth >= deepNullMoveDepth ? deepNullMoveReduction : nullMoveReduction;
+
+            position.playNullMove();
+            int score = -negamax(position, Math.max(0, depth - 1 - reduction), ply + 1, -beta, -beta + 1);
+            position.undoNullMove();
+
+            if(aborted) {
+                return 0;
+            }
+            if(score >= beta) {
+                return beta;
+            }
+        }
+
         short[] moves = searchBuffers[ply];
         int[] scores = scoreBuffers[ply];
         int numMoves = moveGenerator.generateMoves(position, moves);
@@ -496,15 +564,38 @@ public class Engine {
             return inCheck ? -MATE + ply : 0;
         }
 
-        scoreMoves(position, moves, scores, numMoves, tableMove);
+        scoreMoves(position, moves, scores, numMoves, tableMove, ply);
 
+        boolean white = position.isWhiteToMove();
         int originalAlpha = alpha;
         short bestMove = Move.none;
 
         for(int index = 0; index < numMoves; index++) {
             pickNextMove(moves, scores, index, numMoves);
-            position.playMove(moves[index]);
-            int score = -negamax(position, depth - 1, ply + 1, -beta, -alpha);
+            short move = moves[index];
+            boolean quiet = isQuiet(position, move);
+
+            position.playMove(move);
+
+            int score;
+            //late move reductions: with good ordering the best move is almost always among the first few, so quiet
+            //moves further down are first searched shallower, with a window that only asks "does it beat alpha?".
+            //Most fail low and are dropped at a fraction of the cost; one that does beat alpha is searched again at
+            //full depth, so a good move is never lost, only found a little later. Checks and moves out of check are
+            //forcing, and killers have already refuted a sibling, so those are always searched at full depth
+            if(quiet && index >= lateMoveIndex && depth >= lateMoveMinDepth && !inCheck
+                    && move != killers[ply][0] && move != killers[ply][1] && !moveGenerator.inCheck(position)) {
+                int reduction = Math.min(lateMoveReductions[Math.min(depth, lateMoveReductions.length - 1)][index], depth - 2);
+                reduction = Math.max(reduction, 1);
+
+                score = -negamax(position, depth - 1 - reduction, ply + 1, -alpha - 1, -alpha);
+                if(score > alpha && !aborted) {
+                    score = -negamax(position, depth - 1, ply + 1, -beta, -alpha);
+                }
+            } else {
+                score = -negamax(position, depth - 1, ply + 1, -beta, -alpha);
+            }
+
             position.undoMove();
 
             //a stopped search's scores are meaningless, so none of them may reach the table
@@ -514,17 +605,66 @@ public class Engine {
 
             //the opponent already has a better option earlier in the tree, so they'll never allow this position
             if(score >= beta) {
-                store(key, depth, lowerBound, beta, moves[index], ply);
+                if(quiet) {
+                    rewardQuietCutoff(position, white, moves, index, depth, ply);
+                }
+                store(key, depth, lowerBound, beta, move, ply);
                 return beta;
             }
             if(score > alpha) {
                 alpha = score;
-                bestMove = moves[index];
+                bestMove = move;
             }
         }
 
         store(key, depth, alpha > originalAlpha ? exactScore : upperBound, alpha, bestMove, ply);
         return alpha;
+    }
+
+    //the side to move has a knight, bishop, rook or queen; with only king and pawns, zugzwang is too common for
+    //null-move pruning to be trusted
+    private static boolean hasPiecesBesidesPawns(Position position) {
+        if(position.isWhiteToMove()) {
+            return (position.whiteKnights | position.whiteBishops | position.whiteRooks | position.whiteQueens) != 0;
+        }
+        return (position.blackKnights | position.blackBishops | position.blackRooks | position.blackQueens) != 0;
+    }
+
+    //neither a capture nor a promotion; only these are ordered by killers and history, and only these are reduced
+    private static boolean isQuiet(Position position, short move) {
+        if(Move.isPromotion(move) || Move.isEnPessant(move)) {
+            return false;
+        }
+        long enemies = position.isWhiteToMove() ? position.getBlackPieces() : position.getWhitePieces();
+        return (enemies & Position.bit(Move.targetSquare(move))) == 0;
+    }
+
+    //moves[index] is a quiet move that just caused a beta cutoff: it becomes this ply's first killer and gains
+    //history, and the quiet moves searched before it, which failed to cut, lose the same amount. Deeper cutoffs
+    //prune bigger subtrees, so they count for more
+    private static void rewardQuietCutoff(Position position, boolean white, short[] moves, int index, int depth, int ply) {
+        short move = moves[index];
+
+        if(killers[ply][0] != move) {
+            killers[ply][1] = killers[ply][0];
+            killers[ply][0] = move;
+        }
+
+        int bonus = Math.min(depth * depth, 400);
+        updateHistory(white, move, bonus);
+        for(int earlier = 0; earlier < index; earlier++) {
+            if(isQuiet(position, moves[earlier])) {
+                updateHistory(white, moves[earlier], -bonus);
+            }
+        }
+    }
+
+    //moves the entry toward ±historyMax by bonus, scaled down the closer it already is, so it can never pass the
+    //limit and a move that stops working loses its score as quickly as it gained it
+    private static void updateHistory(boolean white, short move, int bonus) {
+        int[] from = history[white ? 0 : 1][Move.startSquare(move)];
+        int to = Move.targetSquare(move);
+        from[to] += bonus - from[to] * Math.abs(bonus) / historyMax;
     }
 
     //stopping the search in the middle of a trade misjudges the position (QxP looks like a free pawn when the
@@ -557,7 +697,7 @@ public class Engine {
         }
 
         numMoves = keepCapturesAndPromotions(position, moves, numMoves);
-        scoreMoves(position, moves, scores, numMoves, Move.none);
+        scoreMoves(position, moves, scores, numMoves, Move.none, ply);
 
         for(int index = 0; index < numMoves; index++) {
             pickNextMove(moves, scores, index, numMoves);
@@ -600,9 +740,11 @@ public class Engine {
 
     //alpha-beta prunes the most when the best move is searched first, so likely good moves get high scores:
     //the transposition table's move first, then captures by most valuable victim and least valuable attacker
-    //(MVV-LVA), plus promotions
-    private static void scoreMoves(Position position, short[] moves, int[] scores, int numMoves, short tableMove) {
+    //(MVV-LVA) and queen promotions, then this ply's killers, then the other quiet moves by history.
+    //Underpromotions go last; they're almost never best
+    private static void scoreMoves(Position position, short[] moves, int[] scores, int numMoves, short tableMove, int ply) {
         boolean white = position.isWhiteToMove();
+        int[][] sideHistory = history[white ? 0 : 1];
 
         for(int index = 0; index < numMoves; index++) {
             short move = moves[index];
@@ -612,19 +754,25 @@ public class Engine {
                 continue;
             }
 
-            int score = 0;
-
             int victim = Move.isEnPessant(move) ? Piece.pawn : position.pieceTypeAt(Move.targetSquare(move), !white);
-            if(victim != Piece.empty) {
-                int attacker = position.pieceTypeAt(Move.startSquare(move), white);
-                score += 10 * orderingValues[victim] - orderingValues[attacker];
-            }
+            int promotion = Move.promotionPiece(move);
 
-            if(Move.isPromotion(move)) {
-                score += orderingValues[Move.promotionPiece(move)];
+            if(victim != Piece.empty || promotion == Piece.queen) {
+                int score = captureOrderingScore + orderingValues[promotion];
+                if(victim != Piece.empty) {
+                    int attacker = position.pieceTypeAt(Move.startSquare(move), white);
+                    score += 10 * orderingValues[victim] - orderingValues[attacker];
+                }
+                scores[index] = score;
+            } else if(promotion != Piece.empty) {
+                scores[index] = -historyMax - 1;
+            } else if(move == killers[ply][0]) {
+                scores[index] = firstKillerOrderingScore;
+            } else if(move == killers[ply][1]) {
+                scores[index] = secondKillerOrderingScore;
+            } else {
+                scores[index] = sideHistory[Move.startSquare(move)][Move.targetSquare(move)];
             }
-
-            scores[index] = score;
         }
     }
 

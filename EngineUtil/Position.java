@@ -442,6 +442,40 @@ public class Position {
     hash = hashHistory[ply];
    }
 
+   //passes the turn without moving, for the search's null-move pruning. It goes on the undo stack as Move.none
+   //and must be taken back with undoNullMove, not undoMove. The halfmove clock restarts at zero so isRepetition
+   //never looks back past the pass: a position from before it didn't arise in a real game line
+   public void playNullMove() {
+    if(ply == moveStack.length) {
+        moveStack = java.util.Arrays.copyOf(moveStack, ply * 2);
+        undoStack = java.util.Arrays.copyOf(undoStack, ply * 2);
+        hashHistory = java.util.Arrays.copyOf(hashHistory, ply * 2);
+    }
+    moveStack[ply] = Move.none;
+    undoStack[ply] = Piece.empty | (castlingRights << 3) | ((enPassantSquare + 1) << 7) | (halfmoveClock << 14);
+    hashHistory[ply] = hash;
+    ply++;
+
+    if(enPassantSquare != -1) {
+        hash ^= enPassantKeys[enPassantSquare & 7];
+        enPassantSquare = -1;
+    }
+    hash ^= blackToMoveKey;
+
+    halfmoveClock = 0;
+    whiteToMove = !whiteToMove;
+   }
+
+   public void undoNullMove() {
+    ply--;
+    int undoInfo = undoStack[ply];
+
+    whiteToMove = !whiteToMove;
+    enPassantSquare = ((undoInfo >>> 7) & 0b1111111) - 1;
+    halfmoveClock = undoInfo >>> 14;
+    hash = hashHistory[ply];
+   }
+
    public int getEnPassantSquare() {
     return enPassantSquare;
    }
@@ -451,6 +485,7 @@ public class Position {
     return ply;
    }
 
+   //Move.none right after a null move
    public short getLastMove() {
     return ply == 0 ? Move.none : moveStack[ply - 1];
    }
