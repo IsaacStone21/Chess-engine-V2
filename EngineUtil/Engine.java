@@ -306,7 +306,37 @@ public class Engine {
     //each search reuses the previous one's best move as its first guess, so the shallow searches pay for
     //themselves by making the deeper ones prune better
     public static short findBestMove(Position position, long timeLimitMillis) {
-        deadline = System.nanoTime() + timeLimitMillis * 1_000_000;
+        return search(position, System.nanoTime() + timeLimitMillis * 1_000_000, maxDepth);
+    }
+
+    //searches exactly `depth` plies (iterative deepening up to it) with no time limit, starting from an empty table,
+    //killers and history so the result depends only on the position; used to check other builds of the engine
+    //against this one move for move and node for node
+    public static short findBestMoveFixedDepth(Position position, int depth) {
+        clearSearchState();
+        return search(position, Long.MAX_VALUE, Math.min(depth, maxDepth));
+    }
+
+    //forgets everything earlier searches learned
+    private static void clearSearchState() {
+        java.util.Arrays.fill(tableKeys, 0L);
+        java.util.Arrays.fill(tableMoves, Move.none);
+        java.util.Arrays.fill(tableScores, 0);
+        java.util.Arrays.fill(tableDepths, (byte) 0);
+        java.util.Arrays.fill(tableBounds, (byte) 0);
+        for(short[] plyKillers : killers) {
+            plyKillers[0] = Move.none;
+            plyKillers[1] = Move.none;
+        }
+        for(int[][] side : history) {
+            for(int[] from : side) {
+                java.util.Arrays.fill(from, 0);
+            }
+        }
+    }
+
+    private static short search(Position position, long searchDeadline, int depthLimit) {
+        deadline = searchDeadline;
         nodes = 0;
         aborted = false;
         lastDepth = 0;
@@ -349,7 +379,7 @@ public class Engine {
             return bestMove;
         }
 
-        for(int depth = 1; depth <= maxDepth; depth++) {
+        for(int depth = 1; depth <= depthLimit; depth++) {
             extensionPlyLimit = depth * 2;
 
             int alpha = -INF;
@@ -405,6 +435,11 @@ public class Engine {
 
     public static int getLastScore() {
         return lastScore;
+    }
+
+    //nodes visited by the last search
+    public static long getNodes() {
+        return nodes;
     }
 
     public static boolean isMateScore(int score) {
