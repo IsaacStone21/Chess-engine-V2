@@ -485,6 +485,11 @@ public class Position {
     return ply;
    }
 
+   //the index-th move played, counting from 0 at the first move on the stack
+   public short getMove(int index) {
+    return moveStack[index];
+   }
+
    //Move.none right after a null move
    public short getLastMove() {
     return ply == 0 ? Move.none : moveStack[ply - 1];

@@ -208,10 +208,14 @@ public class GameManager extends JPanel{
             int score = 0;
             int depth = 0;
             try {
-                move = board.findEngineMove(snapshot);
-                //read here, on the thread that just ran the search, so another search can't overwrite them first
-                score = Engine.getLastScore();
-                depth = Engine.getLastDepth();
+                //a book move skips the search, and leaves depth at 0 so the eval bar isn't fed a stale score
+                move = board.findBookMove(snapshot);
+                if (move == Move.none) {
+                    move = board.findEngineMove(snapshot);
+                    //read here, on the thread that just ran the search, so another search can't overwrite them first
+                    score = Engine.getLastScore();
+                    depth = Engine.getLastDepth();
+                }
             } catch (RuntimeException e) {
                 //still report back, or engineThinking would stay set and lock the board for good
                 e.printStackTrace();
@@ -236,7 +240,7 @@ public class GameManager extends JPanel{
             playMove(move);
         }
 
-        //depth 0 means the engine didn't search (it had only one legal move), so there's no new score
+        //depth 0 means the engine didn't search (a book move, or only one legal move), so there's no new score
         if (depth > 0) {
             setEval(whiteScore);
         }
