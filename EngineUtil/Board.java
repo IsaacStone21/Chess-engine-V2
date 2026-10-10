@@ -48,6 +48,11 @@ public class Board {
         return new Position(position);
     }
 
+    //a move from the opening book, or Move.none once the game has left it; instant, unlike findEngineMove
+    public short findBookMove(Position snapshot) {
+        return OpeningBook.getMove(snapshot);
+    }
+
     //blocks for the think time, so call it off the GUI thread; returns Move.none if the game is already over
     public short findEngineMove(Position snapshot) {
         return Engine.findBestMove(snapshot, thinkTimeMillis);
