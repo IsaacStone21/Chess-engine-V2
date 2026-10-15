@@ -1,9 +1,7 @@
 //host test executable for the C++ engine.
 //
-//  chess_tests                              run every test; exits non-zero if any fails
-//  chess_tests --bench [depth] [--tt-bits N]  nodes per second on the shared fixed-depth suite
-//
-//With --tt-bits 14 the PC build uses the Teensy's table size, so its node counts must equal the Teensy's `bench`.
+//  chess_tests                  run every test; exits non-zero if any fails
+//  chess_tests --bench [depth]  nodes per second on the shared fixed-depth suite
 
 #include <inttypes.h>
 #include <stdarg.h>
@@ -45,16 +43,6 @@ static void fail(const char* format, ...) {
 #define CHECK(condition, ...) do { checks++; if(!(condition)) fail(__VA_ARGS__); } while(0)
 
 static MoveGenerator moveGenerator;
-
-static const char* rookBackendName() {
-#if ENGINE_ROOK_BACKEND == ENGINE_ROOK_HYPERBOLA
-    return "hyperbola";
-#elif ENGINE_ROOK_BACKEND == ENGINE_ROOK_FLASH
-    return "flash table";
-#else
-    return "computed table";
-#endif
-}
 
 //---- perft -----------------------------------------------------------------------------------------------------
 
@@ -199,9 +187,7 @@ static void testHistoryOverflow() {
     CHECK(position.getHash() == position.computeHash(), "hash wrong after undoing a wrapped history");
 }
 
-//---- rook attack backends --------------------------------------------------------------------------------------
-
-static uint64_t computedRooks[Magic::rookTableSize];
+//---- magic attack tables ---------------------------------------------------------------------------------------
 
 //xorshift64*, so the random occupancies are the same every run
 static uint64_t randomState = 0x9E3779B97F4A7C15ULL;
@@ -212,51 +198,29 @@ static uint64_t nextRandom() {
     return randomState * 0x2545F4914F6CDD1DULL;
 }
 
-static void testRookBackends() {
-    printf("rook attack backends (engine uses: %s)\n", rookBackendName());
-    Magic::buildRookTable(computedRooks);
+static void testMagicTables() {
+    printf("magic attack tables\n");
 
-    int headerMismatches = 0;
-    for(int index = 0; index < Magic::rookTableSize; index++) {
-        if(Magic::generatedRookAttacks[index] != computedRooks[index]) {
-            headerMismatches++;
-        }
-    }
-    CHECK(headerMismatches == 0, "generated rook header differs from the computed table in %d entries "
-          "(rebuild it with the regen_rook_table target)", headerMismatches);
-
-    //every square with 100k random occupancies of varying density, plus every relevant blocker subset
-    int hyperbolaMismatches = 0;
-    int engineMismatches = 0;
-    int slowMismatches = 0;
+    //every square with random occupancies of varying density, plus every relevant blocker subset
+    int rookMismatches = 0;
     for(int square = 0; square < 64; square++) {
-        for(int sample = 0; sample < 100000; sample++) {
+        for(int sample = 0; sample < 2000; sample++) {
             uint64_t occupied = nextRandom();
             switch(sample % 3) {
                 case 1: occupied &= nextRandom(); break;
                 case 2: occupied &= nextRandom() & nextRandom(); break;
             }
-            uint64_t expected = computedRooks[Magic::rookIndex(square, occupied)];
-            hyperbolaMismatches += Magic::rookAttacksHyperbola(square, occupied) != expected;
-            engineMismatches += Magic::rookAttacks(square, occupied) != expected;
-            if(sample < 2000) {
-                slowMismatches += Magic::slowRookAttacks(square, occupied) != expected;
-            }
+            rookMismatches += Magic::rookAttacks(square, occupied) != Magic::slowRookAttacks(square, occupied);
         }
 
         uint64_t mask = Magic::rookMasks[square];
         uint64_t subset = 0;
         do {
-            uint64_t expected = Magic::slowRookAttacks(square, subset);
-            hyperbolaMismatches += Magic::rookAttacksHyperbola(square, subset) != expected;
-            engineMismatches += Magic::rookAttacks(square, subset) != expected;
-            slowMismatches += computedRooks[Magic::rookIndex(square, subset)] != expected;
+            rookMismatches += Magic::rookAttacks(square, subset) != Magic::slowRookAttacks(square, subset);
             subset = (subset - mask) & mask;
         } while(subset != 0);
     }
-    CHECK(hyperbolaMismatches == 0, "hyperbola quintessence differs from the magic table %d times", hyperbolaMismatches);
-    CHECK(engineMismatches == 0, "engine rookAttacks differs from the magic table %d times", engineMismatches);
-    CHECK(slowMismatches == 0, "magic table differs from ray walking %d times", slowMismatches);
+    CHECK(rookMismatches == 0, "rook table differs from ray walking %d times", rookMismatches);
 
     int bishopMismatches = 0;
     for(int square = 0; square < 64; square++) {
@@ -436,9 +400,7 @@ static void testJavaReference() {
 
 static int runBench(int depth) {
     static Position position;
-    printf("C++ bench: depth %d, transposition table 2^%d, rook attacks: %s\n", depth, Engine::getTableSizeBits(),
-           rookBackendName());
-    printf("lmr checksum %08" PRIx32 ", start hash %016" PRIx64 "\n", lateMoveReductionChecksum(), startPositionHash());
+    printf("C++ bench: depth %d, transposition table 2^%d\n", depth, tableSizeBits);
 
     uint64_t totalNodes = 0;
     uint64_t totalMicros = 0;
@@ -467,21 +429,13 @@ int main(int argc, char** argv) {
     initEngine();
 
     if(argc > 1 && strcmp(argv[1], "--bench") == 0) {
-        int depth = defaultBenchDepth;
-        for(int arg = 2; arg < argc; arg++) {
-            if(strcmp(argv[arg], "--tt-bits") == 0 && arg + 1 < argc) {
-                Engine::setTableSizeBits(atoi(argv[++arg]));
-            } else {
-                depth = atoi(argv[arg]);
-            }
-        }
-        return runBench(depth);
+        return runBench(argc > 2 ? atoi(argv[2]) : defaultBenchDepth);
     }
 
-    printf("rook attacks: %s, transposition table 2^%d\n", rookBackendName(), Engine::getTableSizeBits());
+    printf("transposition table 2^%d\n", tableSizeBits);
     uint32_t start = nowMicros();
 
-    testRookBackends();
+    testMagicTables();
     testHashesAndUndo();
     testPerft();
     testHistoryOverflow();

@@ -49,10 +49,7 @@ int bishopShifts[64];
 int rookOffsets[64];
 int bishopOffsets[64];
 uint64_t bishopTable[bishopTableSize];
-
-#if ENGINE_ROOK_BACKEND == ENGINE_ROOK_COMPUTED
 uint64_t rookTable[rookTableSize];
-#endif
 
 static const int rookDirections[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
 static const int bishopDirections[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
@@ -128,17 +125,11 @@ static void fillTable(uint64_t* table, const uint64_t* masks, const uint64_t* ma
     }
 }
 
-void buildRookTable(uint64_t* table) {
-    fillTable(table, rookMasks, rookMagics, rookShifts, rookOffsets, rookDirections);
-}
-
 void init() {
     initMasks(rookMasks, rookShifts, rookOffsets, rookDirections);
     initMasks(bishopMasks, bishopShifts, bishopOffsets, bishopDirections);
     fillTable(bishopTable, bishopMasks, bishopMagics, bishopShifts, bishopOffsets, bishopDirections);
-#if ENGINE_ROOK_BACKEND == ENGINE_ROOK_COMPUTED
-    buildRookTable(rookTable);
-#endif
+    fillTable(rookTable, rookMasks, rookMagics, rookShifts, rookOffsets, rookDirections);
 }
 
 }

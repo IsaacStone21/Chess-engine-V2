@@ -23,8 +23,7 @@ constexpr int typeOf(int piece) { return piece & 7; }
 constexpr bool isWhite(int piece) { return (piece & white) != 0; }
 }
 
-//Java's Position.bit. Not called bit() because Arduino.h defines bit(b) as a 32-bit macro, which would silently
-//break every inline function here that the Teensy firmware compiles after including it
+//Java's Position.bit
 inline uint64_t squareBit(int index) {
     return 1ULL << index;
 }

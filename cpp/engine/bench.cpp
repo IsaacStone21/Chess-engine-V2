@@ -1,7 +1,5 @@
 #include "bench.h"
 
-#include "engine.h"
-
 const BenchPosition benchSuite[] = {
     {"start", ""},
     {"ruy_lopez", "e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6"},
@@ -115,20 +113,4 @@ void moveToCoordinates(uint16_t move, char* out) {
         out[4] = piece == Piece::queen ? 'q' : piece == Piece::rook ? 'r' : piece == Piece::bishop ? 'b' : 'n';
         out[5] = '\0';
     }
-}
-
-uint32_t lateMoveReductionChecksum() {
-    uint32_t sum = 0;
-    for(int depth = 0; depth < Engine::lateMoveReductionDepths; depth++) {
-        for(int index = 0; index < maxMoves; index++) {
-            //weighting by position catches values that moved between cells, not just a changed total
-            sum = sum * 31 + (uint32_t) Engine::lateMoveReduction(depth, index);
-        }
-    }
-    return sum;
-}
-
-uint64_t startPositionHash() {
-    Position position;
-    return position.getHash();
 }

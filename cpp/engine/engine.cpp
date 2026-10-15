@@ -12,7 +12,6 @@ void initEngine() {
     Position::initTables();
     MoveGenerator::initTables();
     Engine::initLateMoveReductions();
-    Engine::setTableSizeBits(ENGINE_TT_BITS);
 }
 
 namespace Engine {
@@ -247,12 +246,12 @@ static constexpr int maxDepth = maxPly / 2;
 static constexpr uint64_t timeCheckMask = 2047;
 
 static uint64_t nodes;
-//Java keeps an absolute deadline; micros() wraps, so this keeps the start and the allowed duration instead
+//Java keeps an absolute deadline; nowMicros() wraps, so this keeps the start and the allowed duration instead
 static bool hasDeadline;
 static uint32_t searchStart;
 static uint32_t searchLimitMicros;
 //set once time runs out (or stopSearch is called); every search call then unwinds immediately and its
-//score is thrown away. Volatile because stopSearch may be called from an interrupt or serviceHook
+//score is thrown away. Volatile because stopSearch may be called while a search is running
 static volatile bool aborted;
 
 //deepest search that finished and its score, for whoever wants to see how hard the engine thought
@@ -273,9 +272,8 @@ struct TableEntry {
 };
 static_assert(sizeof(TableEntry) == 16, "a table entry should pack into 16 bytes");
 
-static ENGINE_DMAMEM TableEntry table[1u << ENGINE_TT_BITS];
-static int tableSizeBits = ENGINE_TT_BITS;
-static uint32_t tableMask = (1u << ENGINE_TT_BITS) - 1;
+static TableEntry table[1u << tableSizeBits];
+static constexpr uint32_t tableMask = (1u << tableSizeBits) - 1;
 
 //what a stored score means: alpha-beta cuts searches short, so often the score is only known to be at
 //least (a beta cutoff) or at most (no move beat alpha) the stored value. Zero marks an empty slot
@@ -326,34 +324,13 @@ int lateMoveReduction(int depth, int index) {
 }
 
 void clearSearchState() {
-    memset(table, 0, sizeof(TableEntry) * ((size_t) tableMask + 1));
+    memset(table, 0, sizeof(table));
     memset(killers, 0, sizeof(killers));
     memset(history, 0, sizeof(history));
 }
 
-void setTableSizeBits(int bits) {
-    if(bits < 1) bits = 1;
-    if(bits > ENGINE_TT_BITS) bits = ENGINE_TT_BITS;
-    tableSizeBits = bits;
-    tableMask = (1u << bits) - 1;
-    memset(table, 0, sizeof(table));
-}
-
-int getTableSizeBits() {
-    return tableSizeBits;
-}
-
-const void* tableStorage() {
-    return table;
-}
-
-uint32_t tableStorageBytes() {
-    return (uint32_t) sizeof(table);
-}
-
 static bool outOfTime() {
     if((++nodes & timeCheckMask) == 0) {
-        serviceHook();
         if(hasDeadline && (uint32_t) (nowMicros() - searchStart) >= searchLimitMicros) {
             aborted = true;
         }
@@ -827,7 +804,7 @@ static uint16_t search(Position& position, int depthLimit) {
 }
 
 uint16_t findBestMove(Position& position, uint32_t timeLimitMillis) {
-    //micros() wraps after about 71 minutes, which caps the time limit
+    //nowMicros() wraps after about 71 minutes, which caps the time limit
     const uint32_t maxMillis = 0xFFFFFFFFu / 1000;
     hasDeadline = true;
     searchStart = nowMicros();
