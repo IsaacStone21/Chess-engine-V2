@@ -5,7 +5,7 @@ public class Board {
     private boolean playerIsWhite;
 
     //how long the engine thinks about each move; it searches as deep as it can in that time
-    private static final long thinkTimeMillis = 1000;
+    private static final long thinkTimeMillis = 3000;
 
     static Board board;
 
