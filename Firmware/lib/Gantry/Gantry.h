@@ -7,6 +7,7 @@ class Gantry {
 
     Gantry(int leftStep, int leftDir, int rightStep, int rightDir, int enablePin, int xLimitPin, int yLimitPin);
     void setPosition(double x, double y);
+    void setSquare(int index);
     void initialize();
     void enable();
     void disable();
@@ -26,6 +27,12 @@ class Gantry {
     // mm/s and mm/s^2 respectively
     static constexpr double maxSpeed = 150;
     static constexpr double accel = 400;
+
+    static const int squareSize = 55;
+
+    //TODO: Actually find these :(
+    static const int xZeroOffset = 25;
+    static const int yZeroOffset = 25;
 
     Stepper leftStepper;
     Stepper rightStepper;

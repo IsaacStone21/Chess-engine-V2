@@ -19,6 +19,17 @@
         zero();
     }
 
+    //TODO: add graveyard logic
+    void Gantry::setSquare(int index) {
+        int col = index & 7;
+        int row = (index & ~7) >> 3;
+
+        int targetX = col*squareSize + xZeroOffset;
+        int targetY = row*squareSize + yZeroOffset;
+
+        setPosition(targetX, targetY);
+    }
+
     void Gantry::enable() {
         leftStepper.enableMotor();
         rightStepper.enableMotor();
