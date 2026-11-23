@@ -253,7 +253,7 @@ public class GameManager extends JPanel{
 
 
     private void updateBoardInterface() {
-        pieces = FENUtil.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
+        pieces = PieceImages.FENtoPNGPosition(FENUtil.positionToFEN(board.getPosition()));
         repaint(); 
     }
 
@@ -726,7 +726,7 @@ public class GameManager extends JPanel{
                 draggable = false;
                 return;
             }
-        if (playerIsWhite == FENUtil.FENtoPosition(FENUtil.PNGPositionToFEN(pieces))[index].isWhite() && pieces[index] != null){
+        if (playerIsWhite == FENUtil.FENtoPosition(PieceImages.PNGPositionToFEN(pieces))[index].isWhite() && pieces[index] != null){
             startIndex = index;
             image = pieces[index];
             pieces[index] = null;

@@ -361,7 +361,7 @@ public class Match {
             System.out.print("Building " + label + "... ");
             Path classes = temp.resolve("classes");
 
-            //GUI comes along because FENUtil imports from it; none of it is ever loaded
+            //GUI comes along because FENUtil imported from it in older commits; none of it is ever loaded
             List<String> arguments = new ArrayList<>(List.of("-d", classes.toString(), "-encoding", "UTF-8", "-nowarn", "-Xlint:none", "-proc:none"));
             arguments.addAll(javaFiles(sources.resolve("EngineUtil")));
             arguments.addAll(javaFiles(sources.resolve("GUI")));

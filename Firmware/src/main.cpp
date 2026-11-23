@@ -33,9 +33,6 @@ void movePiece(int startSquare, int targetSquare) {
     magnet.on(false);
   }
 
-
-
-
   gantry.setSquare(targetSquare);
   magnet.off();
 }

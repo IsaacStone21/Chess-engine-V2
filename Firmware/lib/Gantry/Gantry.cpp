@@ -16,7 +16,7 @@
         pinMode(yLimitPin, INPUT);
         pinMode(xLimitPin, INPUT);
 
-        zero();
+        //zero();
     }
 
     //TODO: add graveyard logic
