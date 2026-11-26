@@ -28,6 +28,8 @@ import java.util.zip.ZipInputStream;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
+//copy-paste the following line to run current commit againt the previous
+
 //java Testing/Match.java HEAD
 
 

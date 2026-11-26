@@ -14,9 +14,6 @@ Testing/        Match.java, which plays two versions of the engine against each 
 Firmware/       PlatformIO project for the Teensy 4.1 that moves pieces on the physical board
 ```
 
-A C++17 port of the engine lives on the `cpp-engine` branch. It is kept node-for-node identical to the Java
-engine: same perft counts, and the same best move, score and node count at a fixed depth.
-
 ## The engine
 
 **Board and move generation**
