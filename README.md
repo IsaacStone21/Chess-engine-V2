@@ -83,5 +83,5 @@ To build and flash, install [PlatformIO](https://platformio.org/) and run from `
 pio run -t upload
 ```
 
-Still to do: square offsets need calibrating, homing is disabled in `Gantry::initialize`, captured pieces have
-nowhere to go yet, and the serial command loop in `main.cpp` hasn't been written.
+## Using the board
+When turning on the board, remove your own king from the board. The board must start in the starting position.

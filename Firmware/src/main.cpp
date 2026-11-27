@@ -86,6 +86,11 @@ void loop() {
     } else if (strcmp(command, "PING") == 0) {
         char* args = strtok(nullptr, " ");
 
+        if(args == NULL) {
+          Serial.println("ERR");
+          return;
+        }
+
         Serial.print("OK ");
         Serial.println(args);
 
